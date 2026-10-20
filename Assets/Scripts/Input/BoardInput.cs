@@ -1,6 +1,5 @@
 
 using UnityEngine;
-using System.Collections.Generic;
 
 public class BoardInput : MonoBehaviour
 {
@@ -21,6 +20,7 @@ public class BoardInput : MonoBehaviour
         {
             mainCamera = Camera.main;
         }
+
     }
 
     private void Update()
@@ -39,7 +39,11 @@ public class BoardInput : MonoBehaviour
         {
             return;
         }
-
+        // Abaikan klik selama board masih resolve/jatuh.
+        if (boardManager.IsBusy)
+        {
+            return;
+        }
         Vector3 mousePosition =
             mainCamera.ScreenToWorldPoint(Input.mousePosition);
 
@@ -105,7 +109,7 @@ public class BoardInput : MonoBehaviour
         bool swapped = boardManager.TrySwap(selectedBlock, clickedBlock);
 
         // Reset seleksi dulu supaya skala blok kembali normal
-        // sebelum kita menandai blok yang match.
+        // sebelum blok mulai hancur/jatuh.
         ClearSelection();
 
         if (!swapped)
@@ -116,14 +120,7 @@ public class BoardInput : MonoBehaviour
         // Turn tetap terpakai walau tidak ada match (sesuai desain).
         actionInventory.TryUseTurn(action);
 
-        HashSet<Block> matches = boardManager.FindMatches();
-        Debug.Log($"Match ditemukan: {matches.Count} blok.");
-
-        // SEMENTARA: tandai blok match dengan warna putih.
-        foreach (Block block in matches)
-        {
-            block.MarkAsMatched();
-        }
+        boardManager.ResolveMatches();
     }
 
     private void SelectBlock(Block block)

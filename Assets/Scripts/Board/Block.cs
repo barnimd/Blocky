@@ -1,4 +1,5 @@
 
+using System.Collections;
 using UnityEngine;
 
 [RequireComponent(typeof(SpriteRenderer))]
@@ -9,7 +10,7 @@ public class Block : MonoBehaviour
     public int ColorIndex { get; private set; }
 
     private SpriteRenderer spriteRenderer;
-
+    private Coroutine moveRoutine;
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -33,9 +34,34 @@ public class Block : MonoBehaviour
         GridX = x;
         GridY = y;
     }
-    // SEMENTARA: penanda visual untuk testing MatchFinder.
-    public void MarkAsMatched()
+    // Gerakkan blok ke posisi tujuan secara halus.
+    public void MoveTo(Vector3 target, float duration)
     {
-        spriteRenderer.color = Color.white;
+        if (moveRoutine != null)
+        {
+            StopCoroutine(moveRoutine);
+        }
+
+        moveRoutine = StartCoroutine(MoveRoutine(target, duration));
+    }
+
+    private IEnumerator MoveRoutine(Vector3 target, float duration)
+    {
+        Vector3 start = transform.position;
+        float time = 0f;
+
+        while (time < duration)
+        {
+            time += Time.deltaTime;
+
+            float t = Mathf.Clamp01(time / duration);
+            t = 1f - (1f - t) * (1f - t); // ease-out: cepat lalu melambat
+
+            transform.position = Vector3.Lerp(start, target, t);
+            yield return null; // lanjut di frame berikutnya
+        }
+
+        transform.position = target;
+        moveRoutine = null;
     }
 }
