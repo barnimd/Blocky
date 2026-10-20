@@ -21,8 +21,24 @@ public class ActionInventory : MonoBehaviour
     public int VerticalTurns => verticalTurns;
     public int DiagonalTurns => diagonalTurns;
     public int RotateTurns => rotateTurns;
+
+    // Total semua jatah turn (dipakai untuk bintang & kondisi kalah).
+    public int TotalTurns =>
+        horizontalTurns + verticalTurns + diagonalTurns + rotateTurns;
+
     // Dipanggil setiap kali jumlah turn suatu aksi berubah.
     public event System.Action<ActionType, int> TurnsChanged;
+
+    // Dipanggil saat pemain mencoba aksi yang jatahnya sudah habis.
+    // HUD (shake slot) dan audio (error SFX) mendengarkan event ini.
+    public event System.Action<ActionType> TurnDenied;
+
+    public void ReportDenied(ActionType action)
+    {
+        Debug.LogWarning($"Jatah {action} habis! Aksi dibatalkan.");
+        TurnDenied?.Invoke(action);
+    }
+
     public bool HasTurns(ActionType action)
     {
         return GetTurns(action) > 0;

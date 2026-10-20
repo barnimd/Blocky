@@ -9,6 +9,9 @@ public class BoardInput : MonoBehaviour
     [SerializeField] private ActionInventory actionInventory;
     [SerializeField] private Camera mainCamera;
 
+    [Tooltip("Opsional. Jika diisi, input hanya diterima saat state PlayerInput.")]
+    [SerializeField] private GameManager gameManager;
+
     [Header("Gesture")]
     [Tooltip("Seberapa dekat jari ke tengah blok agar blok dihitung tersentuh.")]
     [SerializeField, Range(0.2f, 0.5f)] private float cellEnterRadius = 0.38f;
@@ -22,6 +25,13 @@ public class BoardInput : MonoBehaviour
     // 4 = satu putaran penuh di grup 2x2.
     private const int MaxPathLength = 4;
 
+    internal enum StepResult
+    {
+        Allowed,
+        Invalid,
+        NoTurns
+    }
+
     // Urutan sel yang dilewati jari selama satu gesture.
     private readonly List<Vector2Int> gesturePath = new List<Vector2Int>();
     private bool isGestureActive;
@@ -30,8 +40,17 @@ public class BoardInput : MonoBehaviour
     private Vector2 gestureStartWorld;
     private Vector2 lastPointerWorld;
 
+    // Sel terakhir yang ditolak karena jatah habis,
+    // supaya feedback merah tidak diulang setiap frame.
+    private Vector2Int? lastDeniedCell;
+
     // Blok yang dipilih untuk mode tap-tap.
     private Block selectedBlock;
+
+    // Board diam DAN game sedang menunggu input pemain.
+    internal bool CanInteract =>
+        !boardManager.IsBusy &&
+        (gameManager == null || gameManager.State == GameState.PlayerInput);
 
     private void Awake()
     {
@@ -60,8 +79,9 @@ public class BoardInput : MonoBehaviour
             // Masih ada input: jangan eksekusi apa pun dulu.
             releaseTimer = releaseDelay;
 
-            // Abaikan input selama board masih resolve/jatuh.
-            if (!boardManager.IsBusy)
+            // Abaikan input selama board masih resolve/jatuh,
+            // atau saat stage sudah selesai.
+            if (CanInteract)
             {
                 TrackPointer(pressStarted);
             }
@@ -140,13 +160,34 @@ public class BoardInput : MonoBehaviour
         {
             SetCellHighlight(lastCell, false);
             gesturePath.RemoveAt(gesturePath.Count - 1);
+            lastDeniedCell = null;
             return;
         }
 
-        if (CanExtendPath(cell))
+        StepResult step = EvaluateStep(
+            gesturePath,
+            cell,
+            actionInventory,
+            out ActionType deniedAction
+        );
+
+        if (step == StepResult.Allowed)
         {
             gesturePath.Add(cell);
             SetCellHighlight(cell, true);
+            lastDeniedCell = null;
+            return;
+        }
+
+        if (step == StepResult.NoTurns)
+        {
+            // Langsung beri feedback merah, sekali per sel.
+            if (lastDeniedCell != cell)
+            {
+                lastDeniedCell = cell;
+                ShowDenied(deniedAction, lastCell, cell);
+            }
+
             return;
         }
 
@@ -156,7 +197,7 @@ public class BoardInput : MonoBehaviour
         {
             FinishGesture();
 
-            if (!boardManager.IsBusy)
+            if (CanInteract)
             {
                 StartGesture(cell, worldPoint);
             }
@@ -167,51 +208,86 @@ public class BoardInput : MonoBehaviour
     // Path hanya boleh membentuk gerakan yang sah DAN masih punya jatah:
     //   2 blok   = swap (horizontal / vertical / diagonal)
     //   3-4 blok = rotate, berbentuk L di dalam satu grup 2x2
-    private bool CanExtendPath(Vector2Int cell)
+    // NoTurns = gerakannya sah tapi jatahnya habis (deniedAction).
+    internal static StepResult EvaluateStep(
+        List<Vector2Int> path,
+        Vector2Int cell,
+        ActionInventory inventory,
+        out ActionType deniedAction)
     {
-        if (gesturePath.Count >= MaxPathLength)
+        deniedAction = default;
+
+        if (path.Count >= MaxPathLength)
         {
-            return false;
+            return StepResult.Invalid;
         }
 
-        Vector2Int lastCell = gesturePath[gesturePath.Count - 1];
+        Vector2Int lastCell = path[path.Count - 1];
 
-        if (!IsNeighbor(cell, lastCell) || gesturePath.Contains(cell))
+        if (!IsNeighbor(cell, lastCell) || path.Contains(cell))
         {
-            return false;
+            return StepResult.Invalid;
         }
 
         Vector2Int move = cell - lastCell;
 
         // Blok ke-2: swap. Jenis swap-nya harus masih punya jatah.
-        if (gesturePath.Count == 1)
+        // Langkah lurus juga boleh jika jatah Rotate masih ada,
+        // karena bisa jadi awal gerakan rotate (bentuk L).
+        if (path.Count == 1)
         {
-            return actionInventory.HasTurns(GetSwapAction(move));
+            ActionType swapAction = GetSwapAction(move);
+
+            if (inventory.HasTurns(swapAction) ||
+                (IsStraightStep(move) && inventory.HasTurns(ActionType.Rotate)))
+            {
+                return StepResult.Allowed;
+            }
+
+            deniedAction = swapAction;
+            return StepResult.NoTurns;
         }
 
-        Vector2Int firstMove = gesturePath[1] - gesturePath[0];
+        Vector2Int firstMove = path[1] - path[0];
 
         // Blok ke-3: harus belok tegak lurus membentuk L,
         // dan jatah Rotate masih ada.
-        if (gesturePath.Count == 2)
+        if (path.Count == 2)
         {
-            return IsStraightStep(firstMove) &&
-                   IsStraightStep(move) &&
-                   Dot(firstMove, move) == 0 &&
-                   actionInventory.HasTurns(ActionType.Rotate);
+            bool isLShape =
+                IsStraightStep(firstMove) &&
+                IsStraightStep(move) &&
+                Dot(firstMove, move) == 0;
+
+            if (!isLShape)
+            {
+                return StepResult.Invalid;
+            }
+
+            if (!inventory.HasTurns(ActionType.Rotate))
+            {
+                deniedAction = ActionType.Rotate;
+                return StepResult.NoTurns;
+            }
+
+            return StepResult.Allowed;
         }
 
         // Blok ke-4: hanya untuk menutup putaran di grup 2x2 yang sama,
         // jadi harus belok ke arah yang sama seperti belokan pertama.
-        Vector2Int secondMove = gesturePath[2] - gesturePath[1];
+        Vector2Int secondMove = path[2] - path[1];
 
-        return IsStraightStep(move) &&
-               Cross(secondMove, move) == Cross(firstMove, secondMove);
+        bool closesLoop =
+            IsStraightStep(move) &&
+            Cross(secondMove, move) == Cross(firstMove, secondMove);
+
+        return closesLoop ? StepResult.Allowed : StepResult.Invalid;
     }
 
     private void StartGesture(Vector2Int cell, Vector2 worldPoint)
     {
         isGestureActive = true;
+        lastDeniedCell = null;
 
         gesturePath.Clear();
         gesturePath.Add(cell);
@@ -301,7 +377,7 @@ public class BoardInput : MonoBehaviour
         TrySwapCells(selectedCell, cell);
     }
 
-    private void TrySwapCells(Vector2Int from, Vector2Int to)
+    internal bool TrySwapCells(Vector2Int from, Vector2Int to)
     {
         Block first = boardManager.GetBlock(from.x, from.y);
         Block second = boardManager.GetBlock(to.x, to.y);
@@ -309,23 +385,26 @@ public class BoardInput : MonoBehaviour
         // Contoh: swipe keluar dari tepi board.
         if (first == null || second == null)
         {
-            return;
+            return false;
         }
 
         ActionType action = GetSwapAction(to - from);
 
-        if (!HasTurnsOrWarn(action))
+        if (!HasTurnsOrDeny(action, from, to))
         {
-            return;
+            return false;
         }
 
         if (boardManager.TrySwap(first, second))
         {
             CompleteAction(action);
+            return true;
         }
+
+        return false;
     }
 
-    private void TryRotatePath(List<Vector2Int> path)
+    internal bool TryRotatePath(List<Vector2Int> path)
     {
         Vector2Int firstMove = path[1] - path[0];
         Vector2Int secondMove = path[2] - path[1];
@@ -342,7 +421,7 @@ public class BoardInput : MonoBehaviour
             Debug.LogWarning(
                 "Gesture tidak dikenali: rotate butuh 3 blok berbentuk L."
             );
-            return;
+            return false;
         }
 
         // Grup 2x2 = kotak terkecil yang memuat ketiga blok.
@@ -359,7 +438,7 @@ public class BoardInput : MonoBehaviour
                 Debug.LogWarning(
                     "Gesture tidak dikenali: geseran keluar dari grup 2x2."
                 );
-                return;
+                return false;
             }
         }
 
@@ -367,27 +446,47 @@ public class BoardInput : MonoBehaviour
         // Sumbu Y Unity ke atas: hasil negatif = searah jarum jam.
         bool clockwise = Cross(firstMove, secondMove) < 0;
 
-        if (!HasTurnsOrWarn(ActionType.Rotate))
+        if (!HasTurnsOrDeny(ActionType.Rotate, path.ToArray()))
         {
-            return;
+            return false;
         }
 
         if (boardManager.TryRotate(anchorX, anchorY, clockwise))
         {
             CompleteAction(ActionType.Rotate);
+            return true;
         }
+
+        return false;
     }
 
     // Semua aksi wajib lewat sini sebelum dieksekusi.
-    private bool HasTurnsOrWarn(ActionType action)
+    private bool HasTurnsOrDeny(ActionType action, params Vector2Int[] cells)
     {
         if (actionInventory.HasTurns(action))
         {
             return true;
         }
 
-        Debug.LogWarning($"Jatah {action} habis! Aksi dibatalkan.");
+        ShowDenied(action, cells);
         return false;
+    }
+
+    // Feedback "jatah habis": blok berkedip merah + bergetar,
+    // dan inventory memberi tahu HUD/audio lewat event TurnDenied.
+    private void ShowDenied(ActionType action, params Vector2Int[] cells)
+    {
+        actionInventory.ReportDenied(action);
+
+        foreach (Vector2Int cell in cells)
+        {
+            Block block = boardManager.GetBlock(cell.x, cell.y);
+
+            if (block != null)
+            {
+                block.PlayDenied();
+            }
+        }
     }
 
     // Dipanggil setelah aksi berhasil dieksekusi di board.
@@ -418,7 +517,7 @@ public class BoardInput : MonoBehaviour
     }
 
     // Tetangga = 8 arah (atas, bawah, kiri, kanan, dan diagonal).
-    private static bool IsNeighbor(Vector2Int a, Vector2Int b)
+    internal static bool IsNeighbor(Vector2Int a, Vector2Int b)
     {
         int dx = Mathf.Abs(a.x - b.x);
         int dy = Mathf.Abs(a.y - b.y);

@@ -11,6 +11,11 @@ public class Block : MonoBehaviour
     [SerializeField, Range(0f, 0.5f)] private float landSquash = 0.18f;
     [SerializeField] private float landSquashDuration = 0.15f;
 
+    [Header("Denied Feedback")]
+    [SerializeField] private Color deniedColor = new Color(1f, 0.1f, 0.1f);
+    [SerializeField] private float deniedDuration = 0.28f;
+    [SerializeField] private float deniedShakeDistance = 0.08f;
+
     [Header("Outline")]
     // Tebal pinggiran, relatif terhadap ukuran blok.
     [SerializeField, Range(0.02f, 0.3f)] private float outlineThickness = 0.08f;
@@ -26,6 +31,12 @@ public class Block : MonoBehaviour
     private SpriteRenderer fillRenderer;
     private Coroutine moveRoutine;
     private Coroutine scaleRoutine;
+    private Coroutine deniedRoutine;
+
+    // Warna asli, supaya efek merah bisa dikembalikan.
+    private Color baseFillColor;
+    private Color baseOutlineColor;
+    private Vector3 deniedRestPosition;
 
     // Skala asli prefab (misal 0.9) dikalikan efek animasi.
     private Vector3 baseScale;
@@ -92,8 +103,13 @@ public class Block : MonoBehaviour
         GridY = y;
         ColorIndex = colorIndex;
 
-        fillRenderer.color = color;
-        spriteRenderer.color = GetOutlineColor(color);
+        StopDenied();
+
+        baseFillColor = color;
+        baseOutlineColor = GetOutlineColor(color);
+
+        fillRenderer.color = baseFillColor;
+        spriteRenderer.color = baseOutlineColor;
     }
     public void SetGridPosition(int x, int y)
     {
@@ -120,6 +136,7 @@ public class Block : MonoBehaviour
     // Swap: geser dengan sedikit kelewatan lalu kembali (ease-out-back).
     public void MoveTo(Vector3 target, float duration)
     {
+        StopDenied();
         Vector3 start = transform.position;
 
         PlayScalePunch(Vector3.one * actionPopScale, duration);
@@ -134,6 +151,7 @@ public class Block : MonoBehaviour
     // Rotate: bergerak melengkung mengelilingi titik pusat 2x2.
     public void OrbitTo(Vector3 pivot, float angle, Vector3 target, float duration)
     {
+        StopDenied();
         Vector3 offset = transform.position - pivot;
 
         PlayScalePunch(Vector3.one * actionPopScale, duration);
@@ -148,6 +166,7 @@ public class Block : MonoBehaviour
     // Gravity: jatuh makin cepat, lalu squash saat mendarat.
     public void FallTo(Vector3 target, float duration)
     {
+        StopDenied();
         Vector3 start = transform.position;
 
         StartMotion(
@@ -158,9 +177,34 @@ public class Block : MonoBehaviour
         );
     }
 
+    // Jatah turn habis: berkedip merah sambil bergetar ke kiri-kanan.
+    public void PlayDenied()
+    {
+        // Jangan ganggu blok yang sedang bergerak atau hancur.
+        if (isClearing || moveRoutine != null)
+        {
+            return;
+        }
+
+        if (deniedRoutine == null)
+        {
+            deniedRestPosition = transform.position;
+        }
+        else
+        {
+            StopCoroutine(deniedRoutine);
+        }
+
+        deniedRoutine = StartCoroutine(DeniedRoutine());
+    }
+
+    public bool IsPlayingDenied => deniedRoutine != null;
+
     // Hancur: membesar sebentar (pop), lalu mengecil dan memudar.
     public void PlayClear(float duration)
     {
+        StopDenied();
+
         isClearing = true;
         isHighlighted = false;
 
@@ -296,6 +340,53 @@ public class Block : MonoBehaviour
         }
 
         Destroy(gameObject);
+    }
+
+    private IEnumerator DeniedRoutine()
+    {
+        const float shakeCycles = 3f;
+        float time = 0f;
+
+        while (time < deniedDuration)
+        {
+            time += Time.deltaTime;
+
+            float t = Mathf.Clamp01(time / deniedDuration);
+
+            // Merah penuh di awal, lalu memudar kembali ke warna asli.
+            float tint = 1f - EaseInQuad(t);
+            fillRenderer.color = Color.Lerp(baseFillColor, deniedColor, tint);
+            spriteRenderer.color = Color.Lerp(baseOutlineColor, deniedColor * 0.6f, tint);
+
+            // Getaran makin kecil menuju akhir.
+            float offset = Mathf.Sin(t * shakeCycles * Mathf.PI * 2f)
+                * deniedShakeDistance * (1f - t);
+            transform.position = deniedRestPosition + new Vector3(offset, 0f, 0f);
+
+            yield return null;
+        }
+
+        RestoreAfterDenied();
+        deniedRoutine = null;
+    }
+
+    private void StopDenied()
+    {
+        if (deniedRoutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(deniedRoutine);
+        deniedRoutine = null;
+        RestoreAfterDenied();
+    }
+
+    private void RestoreAfterDenied()
+    {
+        fillRenderer.color = baseFillColor;
+        spriteRenderer.color = baseOutlineColor;
+        transform.position = deniedRestPosition;
     }
 
     private static Color WithAlpha(Color color, float alpha)

@@ -36,21 +36,46 @@ public class BoardManager : MonoBehaviour
     // True selama board sedang menghancurkan/menjatuhkan blok.
     public bool IsBusy { get; private set; }
 
+    public float CellSpacing => cellSpacing;
+    public Vector3 BoardCenter => boardContainer != null ? boardContainer.position : Vector3.zero;
+
+    // Ukuran board dalam satuan dunia (dipakai untuk menyesuaikan kamera).
+    public Vector2 BoardWorldSize => new Vector2(width * cellSpacing, height * cellSpacing);
+
     // Dipanggil setiap kali sekelompok blok hancur.
     // int = urutan combo (1 = match pertama, 2+ = chain).
     public event System.Action<HashSet<Block>, int> MatchesCleared;
-    private void Start()
+
+    // Dipanggil saat board mulai resolve setelah swap/rotate.
+    public event System.Action ResolveStarted;
+
+    // Dipanggil saat semua match, gravity, dan spawn sudah selesai.
+    // Di sinilah GameManager mengecek menang/kalah.
+    public event System.Action BoardSettled;
+
+    private void Awake()
     {
+        matchFinder = new MatchFinder(this);
+    }
+
+    // Dipanggil GameManager saat stage dimulai.
+    public bool SetupBoard(int boardWidth, int boardHeight)
+    {
+        width = boardWidth;
+        height = boardHeight;
+
         if (!ValidateSetup())
         {
-            return;
+            return false;
         }
 
-        matchFinder = new MatchFinder(this);
+        StopAllCoroutines();
+        IsBusy = false;
         GenerateBoard();
 
         // Board awal seharusnya tidak punya match sama sekali.
         Debug.Log($"Match di board awal: {FindMatches().Count} blok.");
+        return true;
     }
 
     private bool ValidateSetup()
@@ -129,13 +154,24 @@ public class BoardManager : MonoBehaviour
             $"= {width * height} blok."
         );
     }
-    private Vector3 GetWorldPosition(int x, int y)
+    // Posisi dunia sel (x, y), relatif terhadap posisi Board Container.
+    public Vector3 GetWorldPosition(int x, int y)
     {
-        return new Vector3(
+        return BoardCenter + new Vector3(
             (x - (width - 1) / 2f) * cellSpacing,
             (y - (height - 1) / 2f) * cellSpacing,
             0f
         );
+    }
+
+    public Color GetColor(int colorIndex)
+    {
+        if (colorIndex < 0 || colorIndex >= blockColors.Length)
+        {
+            return Color.white;
+        }
+
+        return blockColors[colorIndex];
     }
 
     private Block CreateBlock(
@@ -336,8 +372,9 @@ public class BoardManager : MonoBehaviour
         out int y)
     {
         // Pusat blok ada di bilangan bulat (0, 1, 2, ...).
-        float cellX = worldPoint.x / cellSpacing + (width - 1) / 2f;
-        float cellY = worldPoint.y / cellSpacing + (height - 1) / 2f;
+        Vector2 local = worldPoint - (Vector2)BoardCenter;
+        float cellX = local.x / cellSpacing + (width - 1) / 2f;
+        float cellY = local.y / cellSpacing + (height - 1) / 2f;
 
         x = Mathf.RoundToInt(cellX);
         y = Mathf.RoundToInt(cellY);
@@ -380,6 +417,7 @@ public class BoardManager : MonoBehaviour
     private IEnumerator ResolveRoutine()
     {
         IsBusy = true;
+        ResolveStarted?.Invoke();
 
         // Tunggu animasi swap/rotate selesai dulu.
         yield return new WaitForSeconds(actionDuration);
@@ -408,6 +446,7 @@ public class BoardManager : MonoBehaviour
         }
 
         IsBusy = false;
+        BoardSettled?.Invoke();
     }
 
     private void ClearMatches(HashSet<Block> matches)
@@ -481,6 +520,20 @@ public class BoardManager : MonoBehaviour
 
                 block.FallTo(GetWorldPosition(x, y), fallDuration);
                 spawnOffset++;
+            }
+        }
+    }
+
+    // Khusus test: mengganti warna semua blok dengan pola tertentu.
+    // colors[x, y] = index warna.
+    internal void SetColorsForTest(int[,] colors)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                int colorIndex = colors[x, y];
+                grid[x, y].SetData(x, y, colorIndex, blockColors[colorIndex]);
             }
         }
     }
