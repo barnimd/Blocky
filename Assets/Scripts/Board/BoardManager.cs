@@ -24,6 +24,8 @@ public class BoardManager : MonoBehaviour
         new Color(0.7f, 0.3f, 1f)     // Purple
     };
     [Header("Cascade Settings")]
+    // Durasi animasi swap/rotate sebelum match dicek.
+    [SerializeField] private float actionDuration = 0.22f;
     [SerializeField] private float clearDelay = 0.15f;
     [SerializeField] private float fallDuration = 0.25f;
 
@@ -231,8 +233,9 @@ public class BoardManager : MonoBehaviour
         int dx = Mathf.Abs(first.GridX - second.GridX);
         int dy = Mathf.Abs(first.GridY - second.GridY);
 
-        // Hanya izinkan dua blok yang bersebelahan.
-        if (dx + dy != 1)
+        // Hanya izinkan dua blok yang bersebelahan,
+        // termasuk diagonal (dx = 1 dan dy = 1).
+        if (dx > 1 || dy > 1 || dx + dy == 0)
         {
             return false;
         }
@@ -243,20 +246,11 @@ public class BoardManager : MonoBehaviour
         int secondX = second.GridX;
         int secondY = second.GridY;
 
-        // Tukar data di dalam grid.
-        grid[firstX, firstY] = second;
-        grid[secondX, secondY] = first;
+        SetCell(first, secondX, secondY);
+        SetCell(second, firstX, firstY);
 
-        // Tukar posisi visual.
-        Vector3 firstPosition = first.transform.position;
-        Vector3 secondPosition = second.transform.position;
-
-        first.transform.position = secondPosition;
-        second.transform.position = firstPosition;
-
-        // Perbarui koordinat masing-masing blok.
-        first.SetGridPosition(secondX, secondY);
-        second.SetGridPosition(firstX, firstY);
+        first.MoveTo(GetWorldPosition(secondX, secondY), actionDuration);
+        second.MoveTo(GetWorldPosition(firstX, firstY), actionDuration);
 
         Debug.Log(
             $"Swap berhasil: ({firstX},{firstY}) " +
@@ -265,7 +259,114 @@ public class BoardManager : MonoBehaviour
 
         return true;
     }
-    // Dipanggil setelah swap berhasil.
+
+    // Memutar kelompok 2x2 dengan pojok kiri-bawah di (x, y).
+    public bool TryRotate(int x, int y, bool clockwise)
+    {
+        if (IsBusy)
+        {
+            return false;
+        }
+
+        if (x < 0 || x >= width - 1 ||
+            y < 0 || y >= height - 1)
+        {
+            return false;
+        }
+
+        Block bottomLeft = grid[x, y];
+        Block bottomRight = grid[x + 1, y];
+        Block topRight = grid[x + 1, y + 1];
+        Block topLeft = grid[x, y + 1];
+
+        if (bottomLeft == null || bottomRight == null ||
+            topRight == null || topLeft == null)
+        {
+            return false;
+        }
+
+        if (clockwise)
+        {
+            // Searah jarum jam:
+            // kiri-atas → kanan-atas → kanan-bawah → kiri-bawah → kiri-atas
+            SetCell(topLeft, x + 1, y + 1);
+            SetCell(topRight, x + 1, y);
+            SetCell(bottomRight, x, y);
+            SetCell(bottomLeft, x, y + 1);
+        }
+        else
+        {
+            // Berlawanan jarum jam: kebalikan urutan di atas.
+            SetCell(topLeft, x, y);
+            SetCell(bottomLeft, x + 1, y);
+            SetCell(bottomRight, x + 1, y + 1);
+            SetCell(topRight, x, y + 1);
+        }
+
+        // Animasi: keempat blok melengkung mengelilingi pusat 2x2.
+        // Di Unity (sumbu Y ke atas), sudut negatif = searah jarum jam.
+        Vector3 pivot =
+            (GetWorldPosition(x, y) + GetWorldPosition(x + 1, y + 1)) / 2f;
+        float angle = clockwise ? -90f : 90f;
+
+        foreach (Block block in new[] { bottomLeft, bottomRight, topRight, topLeft })
+        {
+            block.OrbitTo(
+                pivot,
+                angle,
+                GetWorldPosition(block.GridX, block.GridY),
+                actionDuration
+            );
+        }
+
+        string direction = clockwise ? "CW" : "CCW";
+        Debug.Log($"Rotate {direction} berhasil di 2x2 ({x},{y}).");
+
+        return true;
+    }
+
+    // Mengubah posisi dunia (jari/mouse) menjadi koordinat sel.
+    // Hanya dihitung "masuk" jika cukup dekat ke tengah blok,
+    // supaya geseran diagonal yang lewat pojok tidak ikut
+    // menyentuh blok di sebelahnya.
+    public bool TryGetCellAt(
+        Vector2 worldPoint,
+        float enterRadius,
+        out int x,
+        out int y)
+    {
+        // Pusat blok ada di bilangan bulat (0, 1, 2, ...).
+        float cellX = worldPoint.x / cellSpacing + (width - 1) / 2f;
+        float cellY = worldPoint.y / cellSpacing + (height - 1) / 2f;
+
+        x = Mathf.RoundToInt(cellX);
+        y = Mathf.RoundToInt(cellY);
+
+        if (x < 0 || x >= width ||
+            y < 0 || y >= height)
+        {
+            return false;
+        }
+
+        float distance =
+            Vector2.Distance(new Vector2(cellX, cellY), new Vector2(x, y)) * cellSpacing;
+
+        return distance <= enterRadius;
+    }
+
+    public bool IsInsideBoard(int x, int y)
+    {
+        return x >= 0 && x < width && y >= 0 && y < height;
+    }
+
+    // Memindahkan data blok ke sel (x, y). Visual diatur terpisah.
+    private void SetCell(Block block, int x, int y)
+    {
+        grid[x, y] = block;
+        block.SetGridPosition(x, y);
+    }
+
+    // Dipanggil setelah swap/rotate berhasil.
     public void ResolveMatches()
     {
         if (IsBusy)
@@ -279,6 +380,9 @@ public class BoardManager : MonoBehaviour
     private IEnumerator ResolveRoutine()
     {
         IsBusy = true;
+
+        // Tunggu animasi swap/rotate selesai dulu.
+        yield return new WaitForSeconds(actionDuration);
 
         int combo = 0;
         HashSet<Block> matches = FindMatches();
@@ -311,7 +415,9 @@ public class BoardManager : MonoBehaviour
         foreach (Block block in matches)
         {
             grid[block.GridX, block.GridY] = null;
-            Destroy(block.gameObject);
+
+            // Blok menghancurkan dirinya sendiri setelah animasi selesai.
+            block.PlayClear(clearDelay);
         }
     }
 
@@ -344,7 +450,7 @@ public class BoardManager : MonoBehaviour
                 grid[x, y] = null;
 
                 block.SetGridPosition(x, targetY);
-                block.MoveTo(GetWorldPosition(x, targetY), fallDuration);
+                block.FallTo(GetWorldPosition(x, targetY), fallDuration);
             }
         }
     }
@@ -373,7 +479,7 @@ public class BoardManager : MonoBehaviour
                 Block block = CreateBlock(x, y, colorIndex, spawnPosition);
                 grid[x, y] = block;
 
-                block.MoveTo(GetWorldPosition(x, y), fallDuration);
+                block.FallTo(GetWorldPosition(x, y), fallDuration);
                 spawnOffset++;
             }
         }
