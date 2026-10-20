@@ -1,5 +1,6 @@
 
 using UnityEngine;
+using System.Collections.Generic;
 
 public class BoardInput : MonoBehaviour
 {
@@ -101,13 +102,28 @@ public class BoardInput : MonoBehaviour
             return;
         }
 
-        // Konsumsi turn hanya jika swap berhasil.
-        if (boardManager.TrySwap(selectedBlock, clickedBlock))
+        bool swapped = boardManager.TrySwap(selectedBlock, clickedBlock);
+
+        // Reset seleksi dulu supaya skala blok kembali normal
+        // sebelum kita menandai blok yang match.
+        ClearSelection();
+
+        if (!swapped)
         {
-            actionInventory.TryUseTurn(action);
+            return;
         }
 
-        ClearSelection();
+        // Turn tetap terpakai walau tidak ada match (sesuai desain).
+        actionInventory.TryUseTurn(action);
+
+        HashSet<Block> matches = boardManager.FindMatches();
+        Debug.Log($"Match ditemukan: {matches.Count} blok.");
+
+        // SEMENTARA: tandai blok match dengan warna putih.
+        foreach (Block block in matches)
+        {
+            block.MarkAsMatched();
+        }
     }
 
     private void SelectBlock(Block block)

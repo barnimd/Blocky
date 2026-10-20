@@ -1,6 +1,6 @@
 
 using UnityEngine;
-
+using System.Collections.Generic;
 public class BoardManager : MonoBehaviour
 {
     [Header("Board Settings")]
@@ -24,7 +24,7 @@ public class BoardManager : MonoBehaviour
     };
 
     private Block[,] grid;
-
+    private MatchFinder matchFinder;
     public int Width => width;
     public int Height => height;
 
@@ -35,7 +35,11 @@ public class BoardManager : MonoBehaviour
             return;
         }
 
+        matchFinder = new MatchFinder(this);
         GenerateBoard();
+
+        // Board awal seharusnya tidak punya match sama sekali.
+        Debug.Log($"Match di board awal: {FindMatches().Count} blok.");
     }
 
     private bool ValidateSetup()
@@ -121,7 +125,7 @@ public class BoardManager : MonoBehaviour
                 blockObject.name = $"Block_{x}_{y}";
 
                 Block block = blockObject.GetComponent<Block>();
-                block.SetData(x, y, color);
+                block.SetData(x, y, colorIndex, color);
 
                 grid[x, y] = block;
             }
@@ -167,16 +171,14 @@ public class BoardManager : MonoBehaviour
     }
 
     private bool IsSameColor(
-        int colorIndex,
-        Block first,
-        Block second)
+    int colorIndex,
+    Block first,
+    Block second)
     {
-        Color color = blockColors[colorIndex];
-
         return first != null
             && second != null
-            && first.GetComponent<SpriteRenderer>().color == color
-            && second.GetComponent<SpriteRenderer>().color == color;
+            && first.ColorIndex == colorIndex
+            && second.ColorIndex == colorIndex;
     }
 
     public Block GetBlock(int x, int y)
@@ -191,7 +193,10 @@ public class BoardManager : MonoBehaviour
         return grid[x, y];
     }
 
-
+    public HashSet<Block> FindMatches()
+    {
+        return matchFinder.FindAllMatches();
+    }
     public bool TrySwap(Block first, Block second)
     {
         if (first == null || second == null)

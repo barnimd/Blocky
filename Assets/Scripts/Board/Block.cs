@@ -6,6 +6,7 @@ public class Block : MonoBehaviour
 {
     public int GridX { get; private set; }
     public int GridY { get; private set; }
+    public int ColorIndex { get; private set; }
 
     private SpriteRenderer spriteRenderer;
 
@@ -14,10 +15,11 @@ public class Block : MonoBehaviour
         spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
-    public void SetData(int x, int y, Color color)
+    public void SetData(int x, int y, int colorIndex, Color color)
     {
         GridX = x;
         GridY = y;
+        ColorIndex = colorIndex;
 
         if (spriteRenderer == null)
         {
@@ -31,5 +33,9 @@ public class Block : MonoBehaviour
         GridX = x;
         GridY = y;
     }
-
+    // SEMENTARA: penanda visual untuk testing MatchFinder.
+    public void MarkAsMatched()
+    {
+        spriteRenderer.color = Color.white;
+    }
 }
