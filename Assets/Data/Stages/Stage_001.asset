@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4cad4e288534a3a498f09014c97ce76a, type: 3}
+  m_Name: Stage_001
+  m_EditorClassIdentifier: Blocky::StageData
+  stageId: 1
+  width: 8
+  height: 8
+  goals:
+  - color: 1
+    amount: 15
+  - color: 0
+    amount: 10
+  horizontalTurns: 8
+  verticalTurns: 6
+  diagonalTurns: 3
+  rotateTurns: 2
+  star3MinTurnsLeft: 5
+  star2MinTurnsLeft: 2
