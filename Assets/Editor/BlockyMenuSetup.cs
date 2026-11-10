@@ -7,8 +7,9 @@ using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 using static BlockySceneSetup;
 
-// Membangun scene MainMenu: menu utama (Play Stage / Infinite Mode)
-// dan level selector (1 layar = 1 bab = 12 level, 5 bab).
+// Membangun scene MainMenu: menu utama (Play Stage / Infinite Mode /
+// How to Play / Leaderboard), level selector, leaderboard, dan tutorial intro.
+// Level selector (1 layar = 1 bab = 12 level, 5 bab).
 // Dipanggil dari Blocky > Setup All Scenes.
 public static class BlockyMenuSetup
 {
@@ -45,6 +46,16 @@ public static class BlockyMenuSetup
         MainMenuUI mainMenu = SetupMainPanel(canvas, stageList, levelSelect);
 
         SetRef(levelSelect, "mainMenu", mainMenu);
+
+        // Panel di atas semua menu: leaderboard, lalu tutorial paling atas.
+        LeaderboardPanel leaderboard = BlockyLeaderboardSetup.SetupPanel(canvas);
+        SetRef(mainMenu, "leaderboardPanel", leaderboard);
+
+        TutorialOverlay overlay = BlockyTutorialSetup.SetupOverlay(canvas);
+        MenuTutorial tutorial = GetOrAdd<MenuTutorial>(canvas.gameObject);
+        SetRef(tutorial, "overlay", overlay);
+        SetRef(tutorial, "howToPlayButton", canvas.Find("MainPanel/HowToPlayButton").GetComponent<Button>());
+        BlockyTutorialSetup.SetMenuSteps(tutorial, canvas);
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, MenuScenePath);
@@ -146,6 +157,19 @@ public static class BlockyMenuSetup
         TMP_Text bestText = SetupText(best.gameObject, "BEST 0", 40, TextAlignmentOptions.Center);
         bestText.color = new Color(1f, 1f, 1f, 0.75f);
 
+        // Baris bawah: HOW TO PLAY (ulang tutorial) dan LEADERBOARD.
+        Vector2 smallButton = new Vector2(400f, 120f);
+
+        Button howToPlay = SetupButton(panel, "HowToPlayButton", "HOW TO PLAY", smallButton);
+        SetRect((RectTransform)howToPlay.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f), new Vector2(-215f, -720f), smallButton);
+        StyleSmallButton(howToPlay, new Color(1f, 1f, 1f, 0.15f));
+
+        Button leaderboard = SetupButton(panel, "LeaderboardButton", "LEADERBOARD", smallButton);
+        SetRect((RectTransform)leaderboard.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f), new Vector2(215f, -720f), smallButton);
+        StyleSmallButton(leaderboard, new Color(0.65f, 0.4f, 1f, 1f));
+
         MainMenuUI menu = GetOrAdd<MainMenuUI>(canvas.gameObject);
         SetRef(menu, "stageList", stageList);
         SetRef(menu, "mainPanel", panel.gameObject);
@@ -155,6 +179,7 @@ public static class BlockyMenuSetup
         SetRef(menu, "totalStarsText", totalStars);
         SetRef(menu, "infiniteBestText", bestText);
         SetRef(menu, "titleBlocks", blocks);
+        SetRef(menu, "leaderboardButton", leaderboard);
 
         return menu;
     }
@@ -334,7 +359,9 @@ public static class BlockyMenuSetup
 
         RectTransform icon = GetOrCreateRect(root, "Icon");
         icon.sizeDelta = new Vector2(52f, 52f);
-        SetupImage(icon.gameObject, knobSprite, StarColor).raycastTarget = false;
+        Image iconImage = SetupImage(icon.gameObject, starSprite, StarColor);
+        iconImage.raycastTarget = false;
+        iconImage.preserveAspect = true;
 
         RectTransform count = GetOrCreateRect(root, "Count");
         count.sizeDelta = new Vector2(240f, 70f);
@@ -367,6 +394,21 @@ public static class BlockyMenuSetup
         if (label != null)
         {
             label.fontSize = 64;
+        }
+    }
+
+    private static void StyleSmallButton(Button button, Color color)
+    {
+        button.targetGraphic.color = color;
+
+        Shadow shadow = GetOrAdd<Shadow>(button.gameObject);
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.3f);
+        shadow.effectDistance = new Vector2(0f, -8f);
+
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>();
+        if (label != null)
+        {
+            label.fontSize = 42;
         }
     }
 

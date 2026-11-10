@@ -3,7 +3,10 @@
     "rootNamespace": "",
     "references": [
         "Unity.TextMeshPro",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "Unity.Services.Core",
+        "Unity.Services.Authentication",
+        "Unity.Services.Leaderboards"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -12,6 +15,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.services.leaderboards",
+            "expression": "2.0.0",
+            "define": "BLOCKY_UGS"
+        }
+    ],
     "noEngineReferences": false
 }

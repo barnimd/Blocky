@@ -3,7 +3,10 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Panel hasil: Victory (bintang, Retry, Next) atau Game Over (Retry).
+// Panel hasil:
+// - Victory  : bintang (animasi), penjelasan kenapa dapat 1/2/3 bintang,
+//              tips untuk bintang berikutnya, tombol Menu/Retry/Next.
+// - Game Over: Stage gagal, atau Infinite selesai (skor, waktu, leaderboard).
 [RequireComponent(typeof(CanvasGroup))]
 public class ResultPanel : MonoBehaviour
 {
@@ -11,14 +14,29 @@ public class ResultPanel : MonoBehaviour
     [SerializeField] private GameManager gameManager;
     [SerializeField] private ActionInventory actionInventory;
     [SerializeField] private ScoreManager scoreManager;
+    [SerializeField] private LeaderboardPanel leaderboardPanel;
 
     [Header("UI")]
+    [SerializeField] private RectTransform card;
     [SerializeField] private TMP_Text titleText;
     [SerializeField] private TMP_Text detailText;
     [SerializeField] private StarDisplay stars;
     [SerializeField] private Button retryButton;
     [SerializeField] private Button nextButton;
     [SerializeField] private Button menuButton;
+    [SerializeField] private Button leaderboardButton;
+
+    [Header("Star Explanation (Victory)")]
+    [Tooltip("Urutan: baris 3 bintang, 2 bintang, 1 bintang.")]
+    [SerializeField] private StarRuleRow[] starRules;
+    [SerializeField] private GameObject starInfoGroup;
+    [SerializeField] private TMP_Text hintText;
+
+    [Header("Layout")]
+    [SerializeField] private float victoryCardHeight = 1150f;
+    [SerializeField] private float compactCardHeight = 820f;
+    [SerializeField] private float victoryDetailY = -370f;
+    [SerializeField] private float compactDetailY = -190f;
 
     [Header("Text")]
     [SerializeField] private string victoryTitle = "STAGE CLEAR!";
@@ -33,7 +51,10 @@ public class ResultPanel : MonoBehaviour
 
     public bool IsShown { get; private set; }
     public string Title => titleText != null ? titleText.text : string.Empty;
+    public string Detail => detailText != null ? detailText.text : string.Empty;
+    public string Hint => hintText != null ? hintText.text : string.Empty;
     public bool IsNextVisible => nextButton != null && nextButton.gameObject.activeSelf;
+    public StarRuleRow[] StarRules => starRules;
 
     private void Awake()
     {
@@ -53,6 +74,11 @@ public class ResultPanel : MonoBehaviour
         if (menuButton != null)
         {
             menuButton.onClick.AddListener(HandleMenu);
+        }
+
+        if (leaderboardButton != null)
+        {
+            leaderboardButton.onClick.AddListener(HandleLeaderboard);
         }
     }
 
@@ -90,21 +116,67 @@ public class ResultPanel : MonoBehaviour
 
     private void ShowVictory()
     {
+        int turnsLeft = GetTurnsLeft();
+        int earned = gameManager.StarsEarned;
+
         SetTitle(victoryTitle);
-        SetDetail($"Turns left: {GetTurnsLeft()}");
+        SetDetail($"Turns left: {turnsLeft}");
+        SetLayout(true);
 
         if (stars != null)
         {
             stars.gameObject.SetActive(true);
-            stars.SetStars(gameManager.StarsEarned);
+            stars.PlayReveal(earned);
         }
 
-        if (nextButton != null)
-        {
-            nextButton.gameObject.SetActive(gameManager.HasNextStage);
-        }
+        ShowStarExplanation(turnsLeft, earned);
+
+        SetButtonVisible(nextButton, gameManager.HasNextStage);
+        SetButtonVisible(leaderboardButton, false);
 
         Show();
+    }
+
+    // Tabel ambang bintang stage ini + baris hasil pemain di-highlight.
+    private void ShowStarExplanation(int turnsLeft, int earned)
+    {
+        StageData stage = gameManager.CurrentStage;
+
+        if (starInfoGroup != null)
+        {
+            starInfoGroup.SetActive(stage != null);
+        }
+
+        if (stage == null)
+        {
+            return;
+        }
+
+        int star3 = stage.Star3MinTurnsLeft;
+        int star2 = stage.Star2MinTurnsLeft;
+
+        for (int i = 0; i < starRules.Length; i++)
+        {
+            int starCount = StarRating.MaxStars - i;
+
+            if (starRules[i] != null)
+            {
+                starRules[i].Setup(
+                    starCount,
+                    StarRating.DescribeRange(starCount, star3, star2),
+                    starCount == earned
+                );
+            }
+        }
+
+        if (hintText != null)
+        {
+            int needed = StarRating.TurnsToNextStar(turnsLeft, star3, star2);
+
+            hintText.text = needed == 0
+                ? "Perfect! You earned every star."
+                : $"Save {needed} more {(needed == 1 ? "turn" : "turns")} to earn {earned + 1} stars!";
+        }
     }
 
     private void ShowGameOver()
@@ -117,23 +189,28 @@ public class ResultPanel : MonoBehaviour
                 : $"Best: {StageProgress.InfiniteBest:N0}";
 
             SetTitle(infiniteOverTitle);
-            SetDetail($"Score: {score:N0}\n{best}");
+            SetDetail($"Score: {score:N0}\nTime: {RunTimer.Format(gameManager.RunSeconds)}\n{best}");
         }
         else
         {
             SetTitle(gameOverTitle);
-            SetDetail("Objective not completed.");
+            SetDetail("Objective not completed.\nTry saving Rotate & Diagonal for tricky spots.");
         }
+
+        SetLayout(false);
 
         if (stars != null)
         {
             stars.gameObject.SetActive(false);
         }
 
-        if (nextButton != null)
+        if (starInfoGroup != null)
         {
-            nextButton.gameObject.SetActive(false);
+            starInfoGroup.SetActive(false);
         }
+
+        SetButtonVisible(nextButton, false);
+        SetButtonVisible(leaderboardButton, gameManager.IsInfinite);
 
         Show();
     }
@@ -180,6 +257,34 @@ public class ResultPanel : MonoBehaviour
         return actionInventory != null ? actionInventory.TotalTurns : 0;
     }
 
+    // Victory butuh kartu tinggi (bintang + penjelasan),
+    // Game Over cukup kartu pendek dengan detail lebih ke atas.
+    private void SetLayout(bool victory)
+    {
+        if (card != null)
+        {
+            float height = victory ? victoryCardHeight : compactCardHeight;
+            card.sizeDelta = new Vector2(card.sizeDelta.x, height);
+        }
+
+        if (detailText != null)
+        {
+            RectTransform detail = detailText.rectTransform;
+            detail.anchoredPosition = new Vector2(
+                detail.anchoredPosition.x,
+                victory ? victoryDetailY : compactDetailY
+            );
+        }
+    }
+
+    private static void SetButtonVisible(Button button, bool visible)
+    {
+        if (button != null)
+        {
+            button.gameObject.SetActive(visible);
+        }
+    }
+
     private void SetTitle(string text)
     {
         if (titleText != null)
@@ -209,5 +314,16 @@ public class ResultPanel : MonoBehaviour
     private void HandleMenu()
     {
         gameManager.BackToMenu();
+    }
+
+    private void HandleLeaderboard()
+    {
+        if (leaderboardPanel == null)
+        {
+            return;
+        }
+
+        int score = scoreManager != null ? scoreManager.Score : 0;
+        leaderboardPanel.ShowSubmit(score, Mathf.FloorToInt(gameManager.RunSeconds));
     }
 }

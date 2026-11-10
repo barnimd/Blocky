@@ -26,8 +26,14 @@ public class StageInfoHUD : MonoBehaviour
     [Header("Infinite Mode")]
     [SerializeField] private TMP_Text objectiveLabel;
     [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private RunTimer runTimer;
+    [SerializeField] private TMP_Text timerText;
 
     private readonly List<ObjectiveGoalItem> goalItems = new List<ObjectiveGoalItem>();
+
+    // Detik terakhir yang ditampilkan, supaya teks hanya
+    // diperbarui sekali per detik (bukan setiap frame).
+    private int shownSeconds = -1;
 
     public IReadOnlyList<ObjectiveGoalItem> GoalItems => goalItems;
 
@@ -112,6 +118,14 @@ public class StageInfoHUD : MonoBehaviour
             starPreview.gameObject.SetActive(!isInfinite);
         }
 
+        // Stopwatch hanya ada di Infinite Mode.
+        if (timerText != null)
+        {
+            timerText.gameObject.SetActive(isInfinite);
+            shownSeconds = -1;
+            UpdateTimer();
+        }
+
         if (objectiveLabel != null)
         {
             objectiveLabel.text = isInfinite
@@ -125,6 +139,27 @@ public class StageInfoHUD : MonoBehaviour
     private void HandleTurnsChanged(ActionType action, int turns)
     {
         RefreshTurns();
+    }
+
+    private void Update()
+    {
+        UpdateTimer();
+    }
+
+    private void UpdateTimer()
+    {
+        if (timerText == null || runTimer == null || !timerText.gameObject.activeSelf)
+        {
+            return;
+        }
+
+        int seconds = runTimer.ElapsedSeconds;
+
+        if (seconds != shownSeconds)
+        {
+            shownSeconds = seconds;
+            timerText.text = $"TIME {RunTimer.Format(seconds)}";
+        }
     }
 
     // Sisa total turn + bintang yang akan didapat jika menang sekarang.

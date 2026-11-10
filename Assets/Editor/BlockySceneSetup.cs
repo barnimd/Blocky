@@ -34,8 +34,11 @@ public static class BlockySceneSetup
     internal static readonly Color CardColor = new Color(0.12f, 0.14f, 0.28f, 1f);
     internal static readonly Color ButtonColor = new Color(0.2f, 0.6f, 1f, 1f);
 
+    internal const string StarSpritePath = "Assets/Sprites/star.png";
+
     internal static Sprite uiSprite;
     internal static Sprite knobSprite;
+    internal static Sprite starSprite;
 
     [MenuItem("Blocky/Setup All Scenes")]
     public static void Run()
@@ -81,6 +84,35 @@ public static class BlockySceneSetup
     {
         uiSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
         knobSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+        starSprite = LoadStarSprite();
+    }
+
+    // star.png di-import sebagai Sprite tunggal (tanpa mipmap, alpha transparan).
+    // Fallback ke lingkaran jika file tidak ada.
+    private static Sprite LoadStarSprite()
+    {
+        TextureImporter importer = AssetImporter.GetAtPath(StarSpritePath) as TextureImporter;
+
+        if (importer == null)
+        {
+            Debug.LogWarning($"BlockySceneSetup: '{StarSpritePath}' tidak ditemukan, pakai lingkaran.");
+            return knobSprite;
+        }
+
+        if (importer.textureType != TextureImporterType.Sprite ||
+            importer.spriteImportMode != SpriteImportMode.Single ||
+            importer.mipmapEnabled)
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.mipmapEnabled = false;
+            importer.alphaIsTransparency = true;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.SaveAndReimport();
+        }
+
+        Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(StarSpritePath);
+        return sprite != null ? sprite : knobSprite;
     }
 
     // Sprite dari Assets/Sprites (mode Multiple → ambil sub-sprite pertama).
@@ -261,8 +293,10 @@ public static class BlockySceneSetup
         GameManager gameManager = GetOrAdd<GameManager>(managerObject);
         ObjectiveManager objectiveManager = GetOrAdd<ObjectiveManager>(managerObject);
         ScoreManager scoreManager = GetOrAdd<ScoreManager>(managerObject);
+        RunTimer runTimer = GetOrAdd<RunTimer>(managerObject);
 
         SetRef(objectiveManager, "boardManager", boardManager);
+        SetRef(runTimer, "gameManager", gameManager);
         SetRef(scoreManager, "boardManager", boardManager);
 
         SetRef(gameManager, "stageList", stageList);
@@ -272,16 +306,30 @@ public static class BlockySceneSetup
         SetRef(gameManager, "objectiveManager", objectiveManager);
         SetRef(gameManager, "scoreManager", scoreManager);
         SetRef(gameManager, "cameraFitter", cameraFitter);
+        SetRef(gameManager, "runTimer", runTimer);
 
         SetRef(boardInput, "gameManager", gameManager);
 
         Transform canvas = FindRequired("Canvas").transform;
 
         SetupTopBar(canvas, gameManager, inventory, objectiveManager, boardManager,
-            scoreManager, goalItemPrefab);
+            scoreManager, runTimer, goalItemPrefab);
         SetupBottomBar(canvas);
         SetupRefreshButton(canvas, gameManager);
-        SetupResultPanel(canvas, gameManager, inventory, scoreManager);
+        RectTransform boardArea = SetupBoardArea(canvas);
+        ResultPanel resultPanel = SetupResultPanel(canvas, gameManager, inventory, scoreManager);
+
+        // Urutan di Canvas = urutan gambar: panel hasil < leaderboard < tutorial.
+        LeaderboardPanel leaderboard = BlockyLeaderboardSetup.SetupPanel(canvas);
+        SetRef(resultPanel, "leaderboardPanel", leaderboard);
+
+        TutorialOverlay overlay = BlockyTutorialSetup.SetupOverlay(canvas);
+        GameTutorial tutorial = GetOrAdd<GameTutorial>(managerObject);
+        SetRef(tutorial, "gameManager", gameManager);
+        SetRef(tutorial, "boardInput", boardInput);
+        SetRef(tutorial, "runTimer", runTimer);
+        SetRef(tutorial, "overlay", overlay);
+        BlockyTutorialSetup.SetGameSteps(tutorial, canvas, boardArea);
 
         // Kamera menaruh board di area kosong di antara kedua bar.
         SetRef(cameraFitter, "topBar", canvas.Find("TopBar"));
@@ -295,6 +343,7 @@ public static class BlockySceneSetup
         ObjectiveManager objectiveManager,
         BoardManager boardManager,
         ScoreManager scoreManager,
+        RunTimer runTimer,
         ObjectiveGoalItem goalItemPrefab)
     {
         RectTransform topBar = GetOrCreateRect(canvas, "TopBar");
@@ -359,6 +408,15 @@ public static class BlockySceneSetup
         scoreText.fontStyle = FontStyles.Bold;
         scoreRect.gameObject.SetActive(false);
 
+        // Infinite Mode: stopwatch di pojok kanan atas panel skor.
+        RectTransform timerRect = GetOrCreateRect(objectivePanel, "TimerText");
+        SetRect(timerRect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+            new Vector2(-24f, -8f), new Vector2(300f, 44f));
+        TMP_Text timerText = SetupText(timerRect.gameObject, "TIME 00:00", 30, TextAlignmentOptions.MidlineRight);
+        timerText.fontStyle = FontStyles.Bold;
+        timerText.color = new Color(1f, 0.82f, 0.1f);
+        timerRect.gameObject.SetActive(false);
+
         RectTransform goals = GetOrCreateRect(objectivePanel, "Goals");
         SetRect(goals, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
             new Vector2(0f, -22f), new Vector2(-40f, -64f));
@@ -390,6 +448,23 @@ public static class BlockySceneSetup
         SetRef(hud, "menuButton", menuButton);
         SetRef(hud, "objectiveLabel", objectiveLabelText);
         SetRef(hud, "scoreText", scoreText);
+        SetRef(hud, "runTimer", runTimer);
+        SetRef(hud, "timerText", timerText);
+    }
+
+    // Area kosong di antara Top Bar dan Bottom Bar (tempat board).
+    // Tidak terlihat; dipakai tutorial untuk spotlight board.
+    private static RectTransform SetupBoardArea(Transform canvas)
+    {
+        RectTransform area = GetOrCreateRect(canvas, "BoardArea");
+        area.anchorMin = Vector2.zero;
+        area.anchorMax = Vector2.one;
+        area.pivot = new Vector2(0.5f, 0.5f);
+        area.offsetMin = new Vector2(20f, 330f);
+        area.offsetMax = new Vector2(-20f, -430f);
+        area.localScale = Vector3.one;
+        area.SetSiblingIndex(0);
+        return area;
     }
 
     private static void SetupBottomBar(Transform canvas)
@@ -492,7 +567,7 @@ public static class BlockySceneSetup
         }
     }
 
-    private static void SetupResultPanel(
+    private static ResultPanel SetupResultPanel(
         Transform canvas,
         GameManager gameManager,
         ActionInventory inventory,
@@ -507,9 +582,10 @@ public static class BlockySceneSetup
         group.blocksRaycasts = false;
         group.interactable = false;
 
+        // Tinggi kartu diatur ResultPanel saat runtime (Victory lebih tinggi).
         RectTransform card = GetOrCreateRect(panel, "Card");
         SetRect(card, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(820f, 880f));
+            Vector2.zero, new Vector2(860f, 1150f));
         SetupImage(card.gameObject, uiSprite, CardColor);
 
         RectTransform title = GetOrCreateRect(card, "Title");
@@ -520,17 +596,50 @@ public static class BlockySceneSetup
 
         RectTransform starRect = GetOrCreateRect(card, "Stars");
         SetRect(starRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -210f), new Vector2(500f, 150f));
-        StarDisplay stars = SetupStars(starRect, 140f, 30f);
+            new Vector2(0f, -190f), new Vector2(520f, 160f));
+        StarDisplay stars = SetupStars(starRect, 150f, 24f);
 
+        // Detail rata atas: 1 baris (Victory) atau 3 baris (skor, waktu, best).
         RectTransform detail = GetOrCreateRect(card, "Detail");
         SetRect(detail, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -400f), new Vector2(-60f, 80f));
-        TMP_Text detailText = SetupText(detail.gameObject, "Turns left: 0", 44, TextAlignmentOptions.Center);
+            new Vector2(0f, -370f), new Vector2(-60f, 260f));
+        TMP_Text detailText = SetupText(detail.gameObject, "Turns left: 0", 44, TextAlignmentOptions.Top);
+        detailText.textWrappingMode = TextWrappingModes.Normal;
+
+        // Penjelasan bintang: 3 baris (3 bintang, 2, 1) + tips bintang berikutnya.
+        RectTransform starInfo = GetOrCreateRect(card, "StarInfo");
+        SetRect(starInfo, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -450f), new Vector2(-80f, 470f));
+
+        RectTransform rules = GetOrCreateRect(starInfo, "Rules");
+        SetRect(rules, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+            Vector2.zero, new Vector2(0f, 330f));
+        VerticalLayoutGroup rulesLayout = GetOrAdd<VerticalLayoutGroup>(rules.gameObject);
+        rulesLayout.spacing = 12f;
+        rulesLayout.childAlignment = TextAnchor.UpperCenter;
+        rulesLayout.childControlWidth = true;
+        rulesLayout.childControlHeight = false;
+        rulesLayout.childForceExpandWidth = true;
+        rulesLayout.childForceExpandHeight = false;
+
+        StarRuleRow[] ruleRows = new StarRuleRow[StarRating.MaxStars];
+
+        for (int i = 0; i < ruleRows.Length; i++)
+        {
+            ruleRows[i] = SetupStarRuleRow(rules, StarRating.MaxStars - i);
+        }
+
+        RectTransform hint = GetOrCreateRect(starInfo, "Hint");
+        SetRect(hint, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
+            Vector2.zero, new Vector2(0f, 110f));
+        TMP_Text hintText = SetupText(hint.gameObject, "Save 2 more turns to earn 3 stars!", 38,
+            TextAlignmentOptions.Center);
+        hintText.textWrappingMode = TextWrappingModes.Normal;
+        hintText.color = new Color(1f, 0.82f, 0.1f);
 
         RectTransform buttons = GetOrCreateRect(card, "Buttons");
         SetRect(buttons, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
-            new Vector2(0f, 70f), new Vector2(-60f, 140f));
+            new Vector2(0f, 60f), new Vector2(-60f, 140f));
         HorizontalLayoutGroup layout = GetOrAdd<HorizontalLayoutGroup>(buttons.gameObject);
         layout.childAlignment = TextAnchor.MiddleCenter;
         layout.spacing = 24f;
@@ -539,26 +648,80 @@ public static class BlockySceneSetup
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = false;
 
-        // Detail bisa 2 baris (skor + best di Infinite Mode).
-        detailText.textWrappingMode = TextWrappingModes.Normal;
-        detail.sizeDelta = new Vector2(-60f, 130f);
-
         Vector2 buttonSize = new Vector2(230f, 130f);
         Button menu = SetupButton(buttons, "MenuButton", "MENU", buttonSize);
         Button retry = SetupButton(buttons, "RetryButton", "RETRY", buttonSize);
         Button next = SetupButton(buttons, "NextButton", "NEXT", buttonSize);
+        Button ranks = SetupButton(buttons, "LeaderboardButton", "RANKS", buttonSize);
+        ranks.targetGraphic.color = new Color(1f, 0.55f, 0.2f);
         menu.transform.SetSiblingIndex(0);
+        ranks.gameObject.SetActive(false);
 
         ResultPanel result = GetOrAdd<ResultPanel>(panel.gameObject);
         SetRef(result, "gameManager", gameManager);
         SetRef(result, "actionInventory", inventory);
         SetRef(result, "scoreManager", scoreManager);
+        SetRef(result, "card", card);
         SetRef(result, "titleText", titleText);
         SetRef(result, "detailText", detailText);
         SetRef(result, "stars", stars);
         SetRef(result, "retryButton", retry);
         SetRef(result, "nextButton", next);
         SetRef(result, "menuButton", menu);
+        SetRef(result, "leaderboardButton", ranks);
+        SetRef(result, "starInfoGroup", starInfo.gameObject);
+        SetRef(result, "hintText", hintText);
+        SetRefArray(result, "starRules", ruleRows);
+
+        return result;
+    }
+
+    // Satu baris penjelasan: [kotak transparan] (3 ikon bintang)  6+ turns left
+    private static StarRuleRow SetupStarRuleRow(RectTransform parent, int starCount)
+    {
+        RectTransform row = GetOrCreateRect(parent, $"Rule{starCount}Stars");
+        row.sizeDelta = new Vector2(0f, 100f);
+        Image background = SetupImage(row.gameObject, uiSprite, new Color(1f, 1f, 1f, 0.06f));
+        background.raycastTarget = false;
+
+        RectTransform starRect = GetOrCreateRect(row, "Stars");
+        SetRect(starRect, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+            new Vector2(24f, 0f), new Vector2(210f, 70f));
+        StarDisplay stars = SetupStars(starRect, 62f, 8f);
+
+        RectTransform label = GetOrCreateRect(row, "Label");
+        SetRect(label, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+            new Vector2(125f, 0f), new Vector2(-290f, 0f));
+        TMP_Text labelText = SetupText(label.gameObject, "0 turns left", 42, TextAlignmentOptions.MidlineLeft);
+        labelText.fontStyle = FontStyles.Bold;
+
+        StarRuleRow rule = GetOrAdd<StarRuleRow>(row.gameObject);
+        SetRef(rule, "background", background);
+        SetRef(rule, "stars", stars);
+        SetRef(rule, "label", labelText);
+
+        return rule;
+    }
+
+    internal static void SetRefArray(Object target, string field, Object[] values)
+    {
+        SerializedObject so = new SerializedObject(target);
+        SerializedProperty array = so.FindProperty(field);
+
+        if (array == null)
+        {
+            throw new System.InvalidOperationException(
+                $"BlockySceneSetup: field '{field}' tidak ada di {target.GetType().Name}.");
+        }
+
+        array.arraySize = values.Length;
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            array.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+        }
+
+        so.ApplyModifiedPropertiesWithoutUndo();
     }
 
     // ───────────── UI helpers ─────────────
@@ -579,7 +742,9 @@ public static class BlockySceneSetup
         {
             RectTransform star = GetOrCreateRect(parent, $"Star{i + 1}");
             star.sizeDelta = new Vector2(starSize, starSize);
-            images[i] = SetupImage(star.gameObject, knobSprite, Color.white);
+            images[i] = SetupImage(star.gameObject, starSprite, Color.white);
+            images[i].preserveAspect = true;
+            images[i].raycastTarget = false;
         }
 
         StarDisplay display = GetOrAdd<StarDisplay>(parent.gameObject);

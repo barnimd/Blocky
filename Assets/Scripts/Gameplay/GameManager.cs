@@ -31,6 +31,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private ObjectiveManager objectiveManager;
     [SerializeField] private ScoreManager scoreManager;
     [SerializeField] private BoardCameraFitter cameraFitter;
+    [SerializeField] private RunTimer runTimer;
 
     // Bobot Auto-Randomize: H paling banyak, Rotate paling langka.
     private static readonly float[] RandomTurnWeights = { 0.36f, 0.30f, 0.20f, 0.14f };
@@ -45,6 +46,9 @@ public class GameManager : MonoBehaviour
     public int RefreshesLeft { get; private set; }
     public int MaxRefreshes => maxRefreshes;
     public bool IsNewBestScore { get; private set; }
+
+    // Lama permainan Infinite Mode (stopwatch), dalam detik.
+    public float RunSeconds => runTimer != null ? runTimer.Elapsed : 0f;
 
     public bool HasNextStage =>
         !IsInfinite && stageList != null && CurrentStageIndex + 1 < stageList.Count;
@@ -286,9 +290,13 @@ public class GameManager : MonoBehaviour
         if (!MoveFinder.HasAnyMatchingMove(boardManager.GetColorSnapshot()))
         {
             int score = scoreManager != null ? scoreManager.Score : 0;
-            IsNewBestScore = StageProgress.SaveInfiniteBest(score);
+            int seconds = Mathf.FloorToInt(RunSeconds);
+            IsNewBestScore = StageProgress.SaveInfiniteBest(score, seconds);
 
-            Debug.Log($"Infinite Mode selesai: papan terkunci. Skor {score}.");
+            Debug.Log(
+                $"Infinite Mode selesai: papan terkunci. " +
+                $"Skor {score}, waktu {RunTimer.Format(seconds)}."
+            );
             SetState(GameState.GameOver);
             return;
         }

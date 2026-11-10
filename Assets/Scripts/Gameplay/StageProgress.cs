@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // Menyimpan bintang terbaik tiap stage dan high score Infinite Mode
-// di PlayerPrefs (tersimpan di perangkat).
+// lewat SaveStore (PlayerPrefs di mobile, localStorage di web).
 public static class StageProgress
 {
     // Bisa diganti test supaya tidak menimpa progres asli.
@@ -9,10 +9,11 @@ public static class StageProgress
 
     private static string StarsKey(int stageId) => $"{KeyPrefix}stage_{stageId}_stars";
     private static string InfiniteBestKey => $"{KeyPrefix}infinite_best";
+    private static string InfiniteBestTimeKey => $"{KeyPrefix}infinite_best_time";
 
     public static int GetStars(int stageId)
     {
-        return PlayerPrefs.GetInt(StarsKey(stageId), 0);
+        return SaveStore.Current.GetInt(StarsKey(stageId), 0);
     }
 
     // Hanya disimpan jika lebih baik dari sebelumnya.
@@ -25,8 +26,8 @@ public static class StageProgress
             return false;
         }
 
-        PlayerPrefs.SetInt(StarsKey(stageId), stars);
-        PlayerPrefs.Save();
+        SaveStore.Current.SetInt(StarsKey(stageId), stars);
+        SaveStore.Current.Save();
         return true;
     }
 
@@ -61,17 +62,21 @@ public static class StageProgress
         return total;
     }
 
-    public static int InfiniteBest => PlayerPrefs.GetInt(InfiniteBestKey, 0);
+    public static int InfiniteBest => SaveStore.Current.GetInt(InfiniteBestKey, 0);
 
-    public static bool SaveInfiniteBest(int score)
+    // Lama permainan (detik) saat skor terbaik dicapai.
+    public static int InfiniteBestTime => SaveStore.Current.GetInt(InfiniteBestTimeKey, 0);
+
+    public static bool SaveInfiniteBest(int score, int seconds = 0)
     {
         if (score <= InfiniteBest)
         {
             return false;
         }
 
-        PlayerPrefs.SetInt(InfiniteBestKey, score);
-        PlayerPrefs.Save();
+        SaveStore.Current.SetInt(InfiniteBestKey, score);
+        SaveStore.Current.SetInt(InfiniteBestTimeKey, Mathf.Max(0, seconds));
+        SaveStore.Current.Save();
         return true;
     }
 
@@ -80,10 +85,12 @@ public static class StageProgress
     {
         for (int id = 1; id <= maxStageId; id++)
         {
-            PlayerPrefs.DeleteKey(StarsKey(id));
+            SaveStore.Current.DeleteKey(StarsKey(id));
         }
 
-        PlayerPrefs.DeleteKey(InfiniteBestKey);
-        PlayerPrefs.Save();
+        SaveStore.Current.DeleteKey(InfiniteBestKey);
+        SaveStore.Current.DeleteKey(InfiniteBestTimeKey);
+        TutorialProgress.ClearAll();
+        SaveStore.Current.Save();
     }
 }

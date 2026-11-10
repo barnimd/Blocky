@@ -20,6 +20,7 @@ public class MenuFlowTests
     {
         StageProgress.KeyPrefix = TestPrefix;
         StageProgress.ClearAll(MaxStageId);
+        TutorialProgress.MarkAllDone();
         GameSession.Reset();
 
         yield return LoadMenu();
@@ -175,5 +176,45 @@ public class MenuFlowTests
 
         Assert.IsTrue(game.IsInfinite);
         Assert.AreEqual(2, game.RefreshesLeft);
+    }
+
+    [UnityTest]
+    public IEnumerator FirstLaunch_IntroTutorial_LeadsToStage1()
+    {
+        TutorialProgress.ResetAll();
+        yield return LoadMenu();
+
+        MenuTutorial tutorial = Object.FindFirstObjectByType<MenuTutorial>();
+        TutorialOverlay overlay = Object.FindFirstObjectByType<TutorialOverlay>();
+        Assert.IsTrue(tutorial.IsShowing, "Intro muncul saat game pertama kali dibuka.");
+
+        // Tekan NEXT sampai tombol terakhir ("PLAY 1-1").
+        while (overlay.IsPlaying)
+        {
+            overlay.Next();
+        }
+
+        GameManager game = null;
+        yield return WaitFor(() =>
+            (game = Object.FindFirstObjectByType<GameManager>()) != null &&
+            game.State == GameState.PlayerInput);
+
+        Assert.IsFalse(game.IsInfinite);
+        Assert.AreEqual(0, game.CurrentStageIndex);
+        Assert.IsTrue(TutorialProgress.IsDone(TutorialId.Intro));
+        Assert.IsTrue(Object.FindFirstObjectByType<GameTutorial>().IsShowing,
+            "Tutorial gameplay lanjut di Stage 1-1.");
+    }
+
+    [UnityTest]
+    public IEnumerator HowToPlay_ReplaysIntro()
+    {
+        Assert.IsFalse(Object.FindFirstObjectByType<MenuTutorial>().IsShowing);
+
+        Click("Canvas/MainPanel/HowToPlayButton");
+        yield return null;
+
+        Assert.IsTrue(Object.FindFirstObjectByType<MenuTutorial>().IsShowing);
+        Assert.IsFalse(TutorialProgress.IsDone(TutorialId.Stage), "Semua tutorial di-reset.");
     }
 }

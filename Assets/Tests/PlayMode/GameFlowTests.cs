@@ -34,6 +34,10 @@ public class GameFlowTests
         StageProgress.KeyPrefix = TestPrefix;
         StageProgress.ClearAll(MaxStageId);
 
+        // Tutorial dianggap sudah dilihat supaya input tidak terkunci.
+        // Test tutorial sendiri menghapus flag ini.
+        TutorialProgress.MarkAllDone();
+
         GameManager.ResetStageIndex();
         yield return LoadGameScene();
     }
@@ -379,6 +383,13 @@ public class GameFlowTests
 
         // Bintang tersimpan dan stage 2 terbuka.
         Assert.AreEqual(3, StageProgress.GetStars(1));
+
+        // Penjelasan bintang: baris 3 bintang menyala, sesuai ambang stage.
+        Assert.AreEqual(3, result.StarRules.Length);
+        Assert.IsTrue(result.StarRules[0].IsHighlighted);
+        Assert.IsFalse(result.StarRules[1].IsHighlighted);
+        Assert.AreEqual($"{Stage.Star3MinTurnsLeft}+ turns left", result.StarRules[0].Text);
+        Assert.AreEqual("Perfect! You earned every star.", result.Hint);
     }
 
     [UnityTest]
@@ -395,6 +406,11 @@ public class GameFlowTests
 
         Assert.AreEqual(GameState.Victory, game.State);
         Assert.AreEqual(1, game.StarsEarned);
+
+        // Baris 1 bintang menyala + tips berapa turn lagi untuk 2 bintang.
+        Assert.IsTrue(result.StarRules[2].IsHighlighted);
+        StringAssert.StartsWith($"Save {Stage.Star2MinTurnsLeft} more", result.Hint);
+        StringAssert.EndsWith("to earn 2 stars!", result.Hint);
     }
 
     [UnityTest]
@@ -550,6 +566,71 @@ public class GameFlowTests
         Assert.IsTrue(result.IsShown);
         Assert.AreEqual("NO MORE MOVES", result.Title);
         Assert.IsFalse(result.IsNextVisible);
+        StringAssert.Contains("Time: ", result.Detail);
+    }
+
+    // ───────────── Timer & tutorial ─────────────
+
+    [UnityTest]
+    public IEnumerator Infinite_Timer_RunsDuringPlay()
+    {
+        yield return StartInfinite();
+
+        float start = game.RunSeconds;
+        yield return new WaitForSeconds(0.5f);
+
+        Assert.Greater(game.RunSeconds, start, "Stopwatch harus berjalan di Infinite Mode.");
+    }
+
+    [UnityTest]
+    public IEnumerator Stage_Timer_DoesNotRun()
+    {
+        yield return new WaitForSeconds(0.3f);
+        Assert.AreEqual(0f, game.RunSeconds, "Stage Mode tidak memakai stopwatch.");
+    }
+
+    [UnityTest]
+    public IEnumerator Tutorial_Stage1_ShowsOnce_AndLocksInput()
+    {
+        TutorialProgress.ResetAll();
+        yield return LoadGameScene();
+
+        GameTutorial tutorial = Object.FindFirstObjectByType<GameTutorial>();
+        TutorialOverlay overlay = Object.FindFirstObjectByType<TutorialOverlay>();
+
+        Assert.IsTrue(tutorial.IsShowing, "Tutorial muncul di Stage 1-1 pertama kali.");
+        Assert.AreEqual("THE BOARD", overlay.CurrentTitle);
+        Assert.IsFalse(input.CanInteract, "Board terkunci selama tutorial.");
+
+        overlay.Next();
+        Assert.AreEqual(1, overlay.StepIndex);
+
+        overlay.Skip();
+        Assert.IsFalse(tutorial.IsShowing);
+        Assert.IsTrue(input.CanInteract);
+        Assert.IsTrue(TutorialProgress.IsDone(TutorialId.Stage));
+
+        // Main lagi: tutorial tidak muncul.
+        yield return LoadGameScene();
+        Assert.IsFalse(Object.FindFirstObjectByType<GameTutorial>().IsShowing);
+    }
+
+    [UnityTest]
+    public IEnumerator Tutorial_Infinite_PausesTimer()
+    {
+        TutorialProgress.ResetAll();
+        yield return StartInfinite();
+
+        TutorialOverlay overlay = Object.FindFirstObjectByType<TutorialOverlay>();
+        Assert.IsTrue(overlay.IsPlaying);
+
+        float frozen = game.RunSeconds;
+        yield return new WaitForSeconds(0.3f);
+        Assert.AreEqual(frozen, game.RunSeconds, "Stopwatch berhenti selama tutorial.");
+
+        overlay.Skip();
+        yield return new WaitForSeconds(0.3f);
+        Assert.Greater(game.RunSeconds, frozen);
     }
 
     [UnityTest]

@@ -2,7 +2,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Menu utama: PLAY STAGE (ke level selector) dan INFINITE MODE.
+// Menu utama: PLAY STAGE (ke level selector), INFINITE MODE,
+// dan LEADERBOARD global Infinite Mode.
 public class MainMenuUI : MonoBehaviour
 {
     [Header("Data")]
@@ -18,6 +19,10 @@ public class MainMenuUI : MonoBehaviour
     [SerializeField] private TMP_Text totalStarsText;
     [SerializeField] private TMP_Text infiniteBestText;
     [SerializeField] private RectTransform titleBlocks;
+
+    [Header("Leaderboard")]
+    [SerializeField] private Button leaderboardButton;
+    [SerializeField] private LeaderboardPanel leaderboardPanel;
 
     [Header("Juice")]
     [SerializeField] private float buttonPulseScale = 1.04f;
@@ -43,6 +48,11 @@ public class MainMenuUI : MonoBehaviour
         if (titleBlocks != null)
         {
             titleBlocksRestPosition = titleBlocks.anchoredPosition;
+        }
+
+        if (leaderboardButton != null)
+        {
+            leaderboardButton.onClick.AddListener(HandleLeaderboard);
         }
     }
 
@@ -97,7 +107,10 @@ public class MainMenuUI : MonoBehaviour
 
         if (infiniteBestText != null)
         {
-            infiniteBestText.text = $"BEST {StageProgress.InfiniteBest:N0}";
+            int best = StageProgress.InfiniteBest;
+            infiniteBestText.text = best > 0
+                ? $"BEST {best:N0}  ·  {RunTimer.Format(StageProgress.InfiniteBestTime)}"
+                : "BEST 0";
         }
     }
 
@@ -132,6 +145,14 @@ public class MainMenuUI : MonoBehaviour
     private void HandleInfinite()
     {
         GameSession.StartInfinite();
+    }
+
+    private void HandleLeaderboard()
+    {
+        if (leaderboardPanel != null)
+        {
+            leaderboardPanel.ShowView();
+        }
     }
 
     private int GetLatestUnlockedIndex()

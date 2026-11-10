@@ -47,8 +47,12 @@ public class BoardInput : MonoBehaviour
     // Blok yang dipilih untuk mode tap-tap.
     private Block selectedBlock;
 
+    // Dikunci sementara, misal saat tutorial sedang tampil.
+    public bool InputLocked { get; set; }
+
     // Board diam DAN game sedang menunggu input pemain.
     internal bool CanInteract =>
+        !InputLocked &&
         !boardManager.IsBusy &&
         (gameManager == null || gameManager.State == GameState.PlayerInput);
 
