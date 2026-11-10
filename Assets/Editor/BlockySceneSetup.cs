@@ -6,48 +6,96 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Membuat stage asset, prefab UI, dan menyusun HUD + wiring di GameScene.
+// Membuat stage asset, prefab UI, menyusun HUD + wiring di GameScene,
+// lalu membangun scene MainMenu (lewat BlockyMenuSetup).
 // Aman dijalankan berulang kali: objek yang sudah ada dipakai ulang.
-// Menu: Blocky > Setup Game Scene
+// Menu: Blocky > Setup All Scenes
 // Batch: -executeMethod BlockySceneSetup.RunBatch
 public static class BlockySceneSetup
 {
     private const string ScenePath = "Assets/Scenes/GameScene.unity";
     private const string StageFolder = "Assets/Data/Stages";
     private const string StageListPath = "Assets/Data/StageList.asset";
+    private const string InfiniteStagePath = "Assets/Data/InfiniteMode.asset";
     private const string GoalItemPrefabPath = "Assets/Prefabs/UI/ObjectiveGoalItem.prefab";
 
-    private static readonly Color PanelColor = new Color(0.08f, 0.1f, 0.2f, 0.9f);
-    private static readonly Color SubPanelColor = new Color(1f, 1f, 1f, 0.08f);
-    private static readonly Color CardColor = new Color(0.12f, 0.14f, 0.28f, 1f);
-    private static readonly Color ButtonColor = new Color(0.2f, 0.6f, 1f, 1f);
+    // 5 bab x 12 level = 60 stage.
+    private static readonly string[] ChapterNames =
+    {
+        "Sunny Start",
+        "Candy Coast",
+        "Neon Nights",
+        "Crystal Caves",
+        "Cosmic Core"
+    };
 
-    private static Sprite uiSprite;
-    private static Sprite knobSprite;
+    internal static readonly Color PanelColor = new Color(0.08f, 0.1f, 0.2f, 0.9f);
+    internal static readonly Color SubPanelColor = new Color(1f, 1f, 1f, 0.08f);
+    internal static readonly Color CardColor = new Color(0.12f, 0.14f, 0.28f, 1f);
+    internal static readonly Color ButtonColor = new Color(0.2f, 0.6f, 1f, 1f);
 
-    [MenuItem("Blocky/Setup Game Scene")]
+    internal static Sprite uiSprite;
+    internal static Sprite knobSprite;
+
+    [MenuItem("Blocky/Setup All Scenes")]
     public static void Run()
     {
-        uiSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        knobSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+        LoadBuiltinSprites();
 
         StageList stageList = CreateStageAssets();
-        ObjectiveGoalItem goalItemPrefab = CreateGoalItemPrefab();
+        StageData infiniteStage = CreateInfiniteStage();
+        CreateGoalItemPrefab();
 
         var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
 
-        SetupScene(stageList, goalItemPrefab);
+        // OpenScene melepas aset prefab dari memori, jadi referensi yang
+        // didapat sebelum scene dibuka bisa jadi null. Load ulang dari disk.
+        ObjectiveGoalItem goalItemPrefab =
+            AssetDatabase.LoadAssetAtPath<ObjectiveGoalItem>(GoalItemPrefabPath);
+
+        if (goalItemPrefab == null)
+        {
+            throw new System.InvalidOperationException(
+                $"BlockySceneSetup: prefab '{GoalItemPrefabPath}' tidak bisa di-load.");
+        }
+
+        SetupScene(stageList, infiniteStage, goalItemPrefab);
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
 
+        BlockyMenuSetup.SetupMenuScene(stageList);
+
+        // MainMenu = scene pertama saat game dibuka.
         EditorBuildSettings.scenes = new[]
         {
+            new EditorBuildSettingsScene(BlockyMenuSetup.MenuScenePath, true),
             new EditorBuildSettingsScene(ScenePath, true)
         };
 
         AssetDatabase.SaveAssets();
         Debug.Log("BlockySceneSetup: selesai.");
+    }
+
+    internal static void LoadBuiltinSprites()
+    {
+        uiSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        knobSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+    }
+
+    // Sprite dari Assets/Sprites (mode Multiple → ambil sub-sprite pertama).
+    internal static Sprite LoadSprite(string path)
+    {
+        foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
+        {
+            if (asset is Sprite sprite)
+            {
+                return sprite;
+            }
+        }
+
+        Debug.LogWarning($"BlockySceneSetup: sprite '{path}' tidak ditemukan.");
+        return null;
     }
 
     public static void RunBatch()
@@ -70,22 +118,24 @@ public static class BlockySceneSetup
     {
         EnsureFolder(StageFolder);
 
-        // Angka sementara untuk di-tuning. Stage 1 = contoh JSON di GDD.
-        StageData[] stages =
+        // Target warna, jatah turn, dan kriteria bintang diacak oleh
+        // StageGenerator dengan seed tetap → hasil selalu sama.
+        List<StageSpec> specs = StageGenerator.Generate(
+            ChapterNames.Length,
+            StageList.StagesPerChapter,
+            StageGenerator.DefaultSeed
+        );
+
+        StageData[] stages = new StageData[specs.Count];
+
+        for (int i = 0; i < specs.Count; i++)
         {
-            CreateStage(1, 8, 8,
-                new[] { (BlockColor.Blue, 15), (BlockColor.Red, 10) },
-                8, 6, 3, 2, 5, 2),
-            CreateStage(2, 8, 8,
-                new[] { (BlockColor.Green, 20), (BlockColor.Yellow, 15) },
-                7, 5, 3, 2, 5, 2),
-            CreateStage(3, 9, 9,
-                new[] { (BlockColor.Purple, 25), (BlockColor.Blue, 20), (BlockColor.Red, 15) },
-                8, 8, 4, 3, 7, 3),
-        };
+            stages[i] = CreateStage($"{StageFolder}/Stage_{specs[i].StageId:000}.asset", specs[i]);
+        }
 
         StageList stageList = LoadOrCreate<StageList>(StageListPath);
         SerializedObject so = new SerializedObject(stageList);
+
         SerializedProperty list = so.FindProperty("stages");
         list.arraySize = stages.Length;
 
@@ -94,46 +144,62 @@ public static class BlockySceneSetup
             list.GetArrayElementAtIndex(i).objectReferenceValue = stages[i];
         }
 
+        SerializedProperty names = so.FindProperty("chapterNames");
+        names.arraySize = ChapterNames.Length;
+
+        for (int i = 0; i < ChapterNames.Length; i++)
+        {
+            names.GetArrayElementAtIndex(i).stringValue = ChapterNames[i];
+        }
+
         so.ApplyModifiedPropertiesWithoutUndo();
         EditorUtility.SetDirty(stageList);
 
         return stageList;
     }
 
-    private static StageData CreateStage(
-        int id,
-        int width,
-        int height,
-        (BlockColor color, int amount)[] goals,
-        int horizontal,
-        int vertical,
-        int diagonal,
-        int rotate,
-        int star3,
-        int star2)
+    // Infinite Mode: board 8x8, jatah awal seperti contoh GDD, tanpa target.
+    private static StageData CreateInfiniteStage()
     {
-        string path = $"{StageFolder}/Stage_{id:000}.asset";
+        StageSpec spec = new StageSpec
+        {
+            StageId = 1,
+            Width = 8,
+            Height = 8,
+            HorizontalTurns = 8,
+            VerticalTurns = 6,
+            DiagonalTurns = 3,
+            RotateTurns = 2,
+            Star3MinTurnsLeft = 5,
+            Star2MinTurnsLeft = 2
+        };
+
+        return CreateStage(InfiniteStagePath, spec);
+    }
+
+    private static StageData CreateStage(string path, StageSpec spec)
+    {
         StageData stage = LoadOrCreate<StageData>(path);
 
         SerializedObject so = new SerializedObject(stage);
-        so.FindProperty("stageId").intValue = id;
-        so.FindProperty("width").intValue = width;
-        so.FindProperty("height").intValue = height;
-        so.FindProperty("horizontalTurns").intValue = horizontal;
-        so.FindProperty("verticalTurns").intValue = vertical;
-        so.FindProperty("diagonalTurns").intValue = diagonal;
-        so.FindProperty("rotateTurns").intValue = rotate;
-        so.FindProperty("star3MinTurnsLeft").intValue = star3;
-        so.FindProperty("star2MinTurnsLeft").intValue = star2;
+        so.FindProperty("stageId").intValue = spec.StageId;
+        so.FindProperty("width").intValue = spec.Width;
+        so.FindProperty("height").intValue = spec.Height;
+        so.FindProperty("horizontalTurns").intValue = spec.HorizontalTurns;
+        so.FindProperty("verticalTurns").intValue = spec.VerticalTurns;
+        so.FindProperty("diagonalTurns").intValue = spec.DiagonalTurns;
+        so.FindProperty("rotateTurns").intValue = spec.RotateTurns;
+        so.FindProperty("star3MinTurnsLeft").intValue = spec.Star3MinTurnsLeft;
+        so.FindProperty("star2MinTurnsLeft").intValue = spec.Star2MinTurnsLeft;
 
         SerializedProperty goalList = so.FindProperty("goals");
-        goalList.arraySize = goals.Length;
+        goalList.arraySize = spec.Goals.Count;
 
-        for (int i = 0; i < goals.Length; i++)
+        for (int i = 0; i < spec.Goals.Count; i++)
         {
             SerializedProperty goal = goalList.GetArrayElementAtIndex(i);
-            goal.FindPropertyRelative("color").enumValueIndex = (int)goals[i].color;
-            goal.FindPropertyRelative("amount").intValue = goals[i].amount;
+            goal.FindPropertyRelative("color").enumValueIndex = (int)spec.Goals[i].color;
+            goal.FindPropertyRelative("amount").intValue = spec.Goals[i].amount;
         }
 
         so.ApplyModifiedPropertiesWithoutUndo();
@@ -177,7 +243,10 @@ public static class BlockySceneSetup
 
     // ───────────── Scene ─────────────
 
-    private static void SetupScene(StageList stageList, ObjectiveGoalItem goalItemPrefab)
+    private static void SetupScene(
+        StageList stageList,
+        StageData infiniteStage,
+        ObjectiveGoalItem goalItemPrefab)
     {
         GameObject boardObject = FindRequired("BoardManager");
         BoardManager boardManager = boardObject.GetComponent<BoardManager>();
@@ -191,22 +260,28 @@ public static class BlockySceneSetup
         GameObject managerObject = GameObject.Find("GameManager") ?? new GameObject("GameManager");
         GameManager gameManager = GetOrAdd<GameManager>(managerObject);
         ObjectiveManager objectiveManager = GetOrAdd<ObjectiveManager>(managerObject);
+        ScoreManager scoreManager = GetOrAdd<ScoreManager>(managerObject);
 
         SetRef(objectiveManager, "boardManager", boardManager);
+        SetRef(scoreManager, "boardManager", boardManager);
 
         SetRef(gameManager, "stageList", stageList);
+        SetRef(gameManager, "infiniteStage", infiniteStage);
         SetRef(gameManager, "boardManager", boardManager);
         SetRef(gameManager, "actionInventory", inventory);
         SetRef(gameManager, "objectiveManager", objectiveManager);
+        SetRef(gameManager, "scoreManager", scoreManager);
         SetRef(gameManager, "cameraFitter", cameraFitter);
 
         SetRef(boardInput, "gameManager", gameManager);
 
         Transform canvas = FindRequired("Canvas").transform;
 
-        SetupTopBar(canvas, gameManager, inventory, objectiveManager, boardManager, goalItemPrefab);
+        SetupTopBar(canvas, gameManager, inventory, objectiveManager, boardManager,
+            scoreManager, goalItemPrefab);
         SetupBottomBar(canvas);
-        SetupResultPanel(canvas, gameManager, inventory);
+        SetupRefreshButton(canvas, gameManager);
+        SetupResultPanel(canvas, gameManager, inventory, scoreManager);
 
         // Kamera menaruh board di area kosong di antara kedua bar.
         SetRef(cameraFitter, "topBar", canvas.Find("TopBar"));
@@ -219,6 +294,7 @@ public static class BlockySceneSetup
         ActionInventory inventory,
         ObjectiveManager objectiveManager,
         BoardManager boardManager,
+        ScoreManager scoreManager,
         ObjectiveGoalItem goalItemPrefab)
     {
         RectTransform topBar = GetOrCreateRect(canvas, "TopBar");
@@ -226,18 +302,25 @@ public static class BlockySceneSetup
             Vector2.zero, new Vector2(0f, 420f));
         SetupImage(topBar.gameObject, uiSprite, PanelColor);
 
-        // Kiri atas: nomor stage.
+        // Kiri atas: tombol kembali ke menu.
+        RectTransform menuRect = GetOrCreateRect(topBar, "MenuButton");
+        SetRect(menuRect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+            new Vector2(30f, -40f), new Vector2(110f, 110f));
+        Button menuButton = SetupIconButton(menuRect, LoadSprite("Assets/Sprites/left_arrow.png"),
+            SubPanelColor, 70f);
+
+        // Di sebelahnya: nomor stage ("STAGE 1-5").
         RectTransform stageRect = GetOrCreateRect(topBar, "StageText");
         SetRect(stageRect, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-            new Vector2(40f, -40f), new Vector2(360f, 110f));
-        TMP_Text stageText = SetupText(stageRect.gameObject, "STAGE 1", 60, TextAlignmentOptions.MidlineLeft);
+            new Vector2(160f, -40f), new Vector2(300f, 110f));
+        TMP_Text stageText = SetupText(stageRect.gameObject, "STAGE 1-1", 48, TextAlignmentOptions.MidlineLeft);
         stageText.fontStyle = FontStyles.Bold;
 
-        // Tengah atas: preview bintang.
+        // Tengah atas: preview bintang (digeser kanan memberi ruang teks stage).
         RectTransform starRect = GetOrCreateRect(topBar, "StarPreview");
         SetRect(starRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -50f), new Vector2(300f, 90f));
-        StarDisplay starPreview = SetupStars(starRect, 80f, 14f);
+            new Vector2(70f, -50f), new Vector2(280f, 90f));
+        StarDisplay starPreview = SetupStars(starRect, 72f, 12f);
 
         // Kanan atas: sisa total turn.
         RectTransform turnPanel = GetOrCreateRect(topBar, "TurnPanel");
@@ -265,7 +348,16 @@ public static class BlockySceneSetup
         RectTransform objectiveLabel = GetOrCreateRect(objectivePanel, "Label");
         SetRect(objectiveLabel, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -8f), new Vector2(0f, 44f));
-        SetupText(objectiveLabel.gameObject, "OBJECTIVE", 30, TextAlignmentOptions.Center);
+        TMP_Text objectiveLabelText = SetupText(objectiveLabel.gameObject, "OBJECTIVE", 30,
+            TextAlignmentOptions.Center);
+
+        // Infinite Mode: skor besar menggantikan daftar target.
+        RectTransform scoreRect = GetOrCreateRect(objectivePanel, "ScoreText");
+        SetRect(scoreRect, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -22f), new Vector2(-40f, -64f));
+        TMP_Text scoreText = SetupText(scoreRect.gameObject, "0", 96, TextAlignmentOptions.Center);
+        scoreText.fontStyle = FontStyles.Bold;
+        scoreRect.gameObject.SetActive(false);
 
         RectTransform goals = GetOrCreateRect(objectivePanel, "Goals");
         SetRect(goals, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
@@ -289,11 +381,15 @@ public static class BlockySceneSetup
         SetRef(hud, "actionInventory", inventory);
         SetRef(hud, "objectiveManager", objectiveManager);
         SetRef(hud, "boardManager", boardManager);
+        SetRef(hud, "scoreManager", scoreManager);
         SetRef(hud, "stageText", stageText);
         SetRef(hud, "turnsText", turnsText);
         SetRef(hud, "starPreview", starPreview);
         SetRef(hud, "goalContainer", goals);
         SetRef(hud, "goalItemPrefab", goalItemPrefab);
+        SetRef(hud, "menuButton", menuButton);
+        SetRef(hud, "objectiveLabel", objectiveLabelText);
+        SetRef(hud, "scoreText", scoreText);
     }
 
     private static void SetupBottomBar(Transform canvas)
@@ -335,23 +431,72 @@ public static class BlockySceneSetup
             }
         }
 
-        // Refresh (Infinite Mode) tidak ikut layout, dan disembunyikan HUDManager.
-        Transform refresh = bottomBar.Find("RefreshButton");
-        if (refresh != null)
-        {
-            GetOrAdd<LayoutElement>(refresh.gameObject).ignoreLayout = true;
-            SetRect((RectTransform)refresh, new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(1f, 0f), new Vector2(-30f, 20f), new Vector2(140f, 140f));
+    }
 
-            HUDManager hudManager = canvas.GetComponent<HUDManager>();
-            if (hudManager != null)
-            {
-                SetRef(hudManager, "refreshButton", refresh.gameObject);
-            }
+    // Tombol Refresh (Infinite Mode) di tengah Top Bar, menggantikan
+    // preview bintang. Dulu di atas Bottom Bar, tapi bisa menutupi board.
+    private static void SetupRefreshButton(Transform canvas, GameManager gameManager)
+    {
+        Transform topBar = canvas.Find("TopBar");
+        Transform refresh = topBar.Find("RefreshButton");
+
+        if (refresh == null)
+        {
+            Transform bottomBar = canvas.Find("BottomBar");
+            refresh = bottomBar != null ? bottomBar.Find("RefreshButton") : null;
+        }
+
+        if (refresh == null)
+        {
+            refresh = GetOrCreateRect(topBar, "RefreshButton");
+        }
+
+        refresh.SetParent(topBar, false);
+
+        LayoutElement oldLayout = refresh.GetComponent<LayoutElement>();
+        if (oldLayout != null)
+        {
+            Object.DestroyImmediate(oldLayout);
+        }
+
+        RectTransform rect = (RectTransform)refresh;
+        SetRect(rect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(70f, -35f), new Vector2(240f, 120f));
+
+        Image background = SetupImage(rect.gameObject, uiSprite, ButtonColor);
+        Button button = GetOrAdd<Button>(rect.gameObject);
+        button.targetGraphic = background;
+
+        RectTransform icon = GetOrCreateRect(rect, "Icon");
+        SetRect(icon, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+            new Vector2(18f, 0f), new Vector2(90f, 90f));
+        Image iconImage = SetupImage(icon.gameObject, LoadSprite("Assets/Sprites/clockwise_arrow.png"), Color.white);
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+
+        RectTransform count = GetOrCreateRect(rect, "CountText");
+        SetRect(count, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+            new Vector2(-14f, 0f), new Vector2(120f, 90f));
+        TMP_Text countText = SetupText(count.gameObject, "2/2", 46, TextAlignmentOptions.Center);
+        countText.fontStyle = FontStyles.Bold;
+
+        // Disembunyikan; HUDManager memunculkannya hanya di Infinite Mode.
+        rect.gameObject.SetActive(false);
+
+        HUDManager hudManager = canvas.GetComponent<HUDManager>();
+        if (hudManager != null)
+        {
+            SetRef(hudManager, "refreshButton", rect.gameObject);
+            SetRef(hudManager, "refreshCountText", countText);
+            SetRef(hudManager, "gameManager", gameManager);
         }
     }
 
-    private static void SetupResultPanel(Transform canvas, GameManager gameManager, ActionInventory inventory)
+    private static void SetupResultPanel(
+        Transform canvas,
+        GameManager gameManager,
+        ActionInventory inventory,
+        ScoreManager scoreManager)
     {
         RectTransform panel = GetOrCreateRect(canvas, "ResultPanel");
         panel.SetAsLastSibling();
@@ -388,28 +533,37 @@ public static class BlockySceneSetup
             new Vector2(0f, 70f), new Vector2(-60f, 140f));
         HorizontalLayoutGroup layout = GetOrAdd<HorizontalLayoutGroup>(buttons.gameObject);
         layout.childAlignment = TextAnchor.MiddleCenter;
-        layout.spacing = 40f;
+        layout.spacing = 24f;
         layout.childControlWidth = false;
         layout.childControlHeight = false;
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = false;
 
-        Button retry = SetupButton(buttons, "RetryButton", "RETRY");
-        Button next = SetupButton(buttons, "NextButton", "NEXT");
+        // Detail bisa 2 baris (skor + best di Infinite Mode).
+        detailText.textWrappingMode = TextWrappingModes.Normal;
+        detail.sizeDelta = new Vector2(-60f, 130f);
+
+        Vector2 buttonSize = new Vector2(230f, 130f);
+        Button menu = SetupButton(buttons, "MenuButton", "MENU", buttonSize);
+        Button retry = SetupButton(buttons, "RetryButton", "RETRY", buttonSize);
+        Button next = SetupButton(buttons, "NextButton", "NEXT", buttonSize);
+        menu.transform.SetSiblingIndex(0);
 
         ResultPanel result = GetOrAdd<ResultPanel>(panel.gameObject);
         SetRef(result, "gameManager", gameManager);
         SetRef(result, "actionInventory", inventory);
+        SetRef(result, "scoreManager", scoreManager);
         SetRef(result, "titleText", titleText);
         SetRef(result, "detailText", detailText);
         SetRef(result, "stars", stars);
         SetRef(result, "retryButton", retry);
         SetRef(result, "nextButton", next);
+        SetRef(result, "menuButton", menu);
     }
 
     // ───────────── UI helpers ─────────────
 
-    private static StarDisplay SetupStars(RectTransform parent, float starSize, float spacing)
+    internal static StarDisplay SetupStars(RectTransform parent, float starSize, float spacing)
     {
         HorizontalLayoutGroup layout = GetOrAdd<HorizontalLayoutGroup>(parent.gameObject);
         layout.childAlignment = TextAnchor.MiddleCenter;
@@ -442,10 +596,15 @@ public static class BlockySceneSetup
         return display;
     }
 
-    private static Button SetupButton(Transform parent, string name, string label)
+    internal static Button SetupButton(Transform parent, string name, string label)
+    {
+        return SetupButton(parent, name, label, new Vector2(320f, 130f));
+    }
+
+    internal static Button SetupButton(Transform parent, string name, string label, Vector2 size)
     {
         RectTransform rect = GetOrCreateRect(parent, name);
-        rect.sizeDelta = new Vector2(320f, 130f);
+        rect.sizeDelta = size;
 
         Image image = SetupImage(rect.gameObject, uiSprite, ButtonColor);
         Button button = GetOrAdd<Button>(rect.gameObject);
@@ -459,13 +618,30 @@ public static class BlockySceneSetup
         return button;
     }
 
-    private static Image CreateImage(Transform parent, string name, Sprite sprite, Color color)
+    // Tombol kotak dengan ikon di tengah (back, panah bab, dll).
+    internal static Button SetupIconButton(RectTransform rect, Sprite icon, Color color, float iconSize)
+    {
+        Image background = SetupImage(rect.gameObject, uiSprite, color);
+        Button button = GetOrAdd<Button>(rect.gameObject);
+        button.targetGraphic = background;
+
+        RectTransform iconRect = GetOrCreateRect(rect, "Icon");
+        SetRect(iconRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(iconSize, iconSize));
+        Image iconImage = SetupImage(iconRect.gameObject, icon, Color.white);
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+
+        return button;
+    }
+
+    internal static Image CreateImage(Transform parent, string name, Sprite sprite, Color color)
     {
         RectTransform rect = GetOrCreateRect(parent, name);
         return SetupImage(rect.gameObject, sprite, color);
     }
 
-    private static Image SetupImage(GameObject target, Sprite sprite, Color color)
+    internal static Image SetupImage(GameObject target, Sprite sprite, Color color)
     {
         Image image = GetOrAdd<Image>(target);
         image.sprite = sprite;
@@ -474,14 +650,14 @@ public static class BlockySceneSetup
         return image;
     }
 
-    private static TMP_Text CreateText(Transform parent, string name, string value, float size,
+    internal static TMP_Text CreateText(Transform parent, string name, string value, float size,
         TextAlignmentOptions alignment)
     {
         RectTransform rect = GetOrCreateRect(parent, name);
         return SetupText(rect.gameObject, value, size, alignment);
     }
 
-    private static TMP_Text SetupText(GameObject target, string value, float size,
+    internal static TMP_Text SetupText(GameObject target, string value, float size,
         TextAlignmentOptions alignment)
     {
         TextMeshProUGUI text = GetOrAdd<TextMeshProUGUI>(target);
@@ -500,7 +676,7 @@ public static class BlockySceneSetup
         return text;
     }
 
-    private static RectTransform GetOrCreateRect(Transform parent, string name)
+    internal static RectTransform GetOrCreateRect(Transform parent, string name)
     {
         Transform child = parent.Find(name);
 
@@ -515,7 +691,7 @@ public static class BlockySceneSetup
         return (RectTransform)child;
     }
 
-    private static void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax,
+    internal static void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax,
         Vector2 pivot, Vector2 position, Vector2 size)
     {
         rect.anchorMin = anchorMin;
@@ -528,7 +704,7 @@ public static class BlockySceneSetup
 
     // ───────────── General helpers ─────────────
 
-    private static T GetOrAdd<T>(GameObject target) where T : Component
+    internal static T GetOrAdd<T>(GameObject target) where T : Component
     {
         T component = target.GetComponent<T>();
         return component != null ? component : target.AddComponent<T>();
@@ -546,7 +722,7 @@ public static class BlockySceneSetup
         return found;
     }
 
-    private static void SetRef(Object target, string field, Object value)
+    internal static void SetRef(Object target, string field, Object value)
     {
         SerializedObject so = new SerializedObject(target);
         SerializedProperty property = so.FindProperty(field);
@@ -561,7 +737,7 @@ public static class BlockySceneSetup
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    private static T LoadOrCreate<T>(string path) where T : ScriptableObject
+    internal static T LoadOrCreate<T>(string path) where T : ScriptableObject
     {
         T asset = AssetDatabase.LoadAssetAtPath<T>(path);
 
@@ -574,7 +750,7 @@ public static class BlockySceneSetup
         return asset;
     }
 
-    private static void EnsureFolder(string folder)
+    internal static void EnsureFolder(string folder)
     {
         if (AssetDatabase.IsValidFolder(folder))
         {

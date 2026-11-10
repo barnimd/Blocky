@@ -16,3 +16,66 @@ MonoBehaviour:
   - {fileID: 11400000, guid: c991e2ce0f28783458f4693f32246bf8, type: 2}
   - {fileID: 11400000, guid: 396351d664eb6d64685106383aa681e9, type: 2}
   - {fileID: 11400000, guid: ab7dd63c372ff7849b31123951bf8053, type: 2}
+  - {fileID: 11400000, guid: 99048f29a691a4349a8053f44be0a628, type: 2}
+  - {fileID: 11400000, guid: ced2b24c2b6629c478be05a0fe1290fc, type: 2}
+  - {fileID: 11400000, guid: 41a775064c7a45a4c896e4ee4860dbb7, type: 2}
+  - {fileID: 11400000, guid: 911a801177f23d64382b88b0a4726c00, type: 2}
+  - {fileID: 11400000, guid: ad350ada40da2a747a71068bff668212, type: 2}
+  - {fileID: 11400000, guid: 831e221f2ee5c724993e8001cac78e11, type: 2}
+  - {fileID: 11400000, guid: 05862e94ce8ba2c4f939568ae418e207, type: 2}
+  - {fileID: 11400000, guid: 02a0e935109442f4aa66c8606e3aa008, type: 2}
+  - {fileID: 11400000, guid: f1c3e6c167582c04b9eabeecced3ea17, type: 2}
+  - {fileID: 11400000, guid: cf080f3217767404cb53e05fa723e55b, type: 2}
+  - {fileID: 11400000, guid: 79efa008a641ff542b7811e56557e84b, type: 2}
+  - {fileID: 11400000, guid: 8c4e34ede00c62043b815df9684b650c, type: 2}
+  - {fileID: 11400000, guid: 6feb1c51ea44f144c9a0788801b95416, type: 2}
+  - {fileID: 11400000, guid: 6640398d8c8166047ad44a91baf40e9a, type: 2}
+  - {fileID: 11400000, guid: 68fa5c31cd7ccaa45a7958ad7864161e, type: 2}
+  - {fileID: 11400000, guid: c9f4515b15f0ba744b5852d0bec9d079, type: 2}
+  - {fileID: 11400000, guid: def72ca4336bee847b65ab540a017f04, type: 2}
+  - {fileID: 11400000, guid: 6e55e9e7e37435a4ab1df04d033de35c, type: 2}
+  - {fileID: 11400000, guid: c061feee6669d2748a2e18dffb248d2d, type: 2}
+  - {fileID: 11400000, guid: 4e4c0a60f5125e24985693927c6b6300, type: 2}
+  - {fileID: 11400000, guid: 360c87756ff0ad2408a58e7d81f08532, type: 2}
+  - {fileID: 11400000, guid: e4792c9bed9f19949bec086f273801a4, type: 2}
+  - {fileID: 11400000, guid: 14ac47b410a9a1446a5d4ce15eae994e, type: 2}
+  - {fileID: 11400000, guid: 544c6f314a9373f428797ef90620eb88, type: 2}
+  - {fileID: 11400000, guid: fe2f3c9664d6b154184a8eddb55861c9, type: 2}
+  - {fileID: 11400000, guid: 393e3dbc99167da4698b1d6907cd61ba, type: 2}
+  - {fileID: 11400000, guid: becddc8556cd3bb4e9fdee0c545ad563, type: 2}
+  - {fileID: 11400000, guid: d6ec6ac7f9122f648abf729bcff62760, type: 2}
+  - {fileID: 11400000, guid: d9e1279614cfae742b42cd051519583d, type: 2}
+  - {fileID: 11400000, guid: 9bb5715c54616ce48b3b73661040333c, type: 2}
+  - {fileID: 11400000, guid: 7bf2050283e91104fbdb50da22434240, type: 2}
+  - {fileID: 11400000, guid: 5c7efbc6512c12d4d8bb35699011a158, type: 2}
+  - {fileID: 11400000, guid: b3875279ad258ed45aa7c1ff357714f8, type: 2}
+  - {fileID: 11400000, guid: 445e61098f0f67f4d98bf1675d928a0a, type: 2}
+  - {fileID: 11400000, guid: 79dccddcbe662dc47a8403ef12475e4e, type: 2}
+  - {fileID: 11400000, guid: c5ef00b9c1bdd2e4b8ae38c6ab010830, type: 2}
+  - {fileID: 11400000, guid: 0d64858c12773f9498782791064b911b, type: 2}
+  - {fileID: 11400000, guid: 7530f97e9c3d30a40ac87ad26f510111, type: 2}
+  - {fileID: 11400000, guid: b705a1728f5308747a0a6b82b858e09f, type: 2}
+  - {fileID: 11400000, guid: 61c3e119957623045a61f6bf2f1cc98f, type: 2}
+  - {fileID: 11400000, guid: ba5825b494a238147b229a59428bd448, type: 2}
+  - {fileID: 11400000, guid: f1608dd65988ee648bd20e6f4c749295, type: 2}
+  - {fileID: 11400000, guid: 4d8b15d6bc4d27b458d994287d328bd2, type: 2}
+  - {fileID: 11400000, guid: f0d7915a671babe4fbe262033e8f6242, type: 2}
+  - {fileID: 11400000, guid: 9496768f9b1ba0d41b8466b7c5a80692, type: 2}
+  - {fileID: 11400000, guid: da9cd572fa76dc64bad467afa35591e4, type: 2}
+  - {fileID: 11400000, guid: e0d7799d1b3b587449f6713ad2f8cf9f, type: 2}
+  - {fileID: 11400000, guid: 8475a33e2568fed4eae2a3eab4e5f308, type: 2}
+  - {fileID: 11400000, guid: 7fd1ca2df764334409fd23fefc85136c, type: 2}
+  - {fileID: 11400000, guid: a5a19b111faca044887f9dc339be3e8a, type: 2}
+  - {fileID: 11400000, guid: e028053e11d9cf64d8552d63a98a5110, type: 2}
+  - {fileID: 11400000, guid: 60b5f6153f74d9840a255d75334e0c2f, type: 2}
+  - {fileID: 11400000, guid: f3a8720d61ad0b243b4b4601de14f6e5, type: 2}
+  - {fileID: 11400000, guid: 067bcaf78efa0184aa2c7446a6527be2, type: 2}
+  - {fileID: 11400000, guid: 9f60c767f0da7944580fa8e7c17cef82, type: 2}
+  - {fileID: 11400000, guid: f6ab5088eedb9ae4ab3574f045a30dc0, type: 2}
+  - {fileID: 11400000, guid: 10268b009d4e2284d8b44a0632da227e, type: 2}
+  chapterNames:
+  - Sunny Start
+  - Candy Coast
+  - Neon Nights
+  - Crystal Caves
+  - Cosmic Core

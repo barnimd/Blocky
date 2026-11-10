@@ -16,13 +16,13 @@ MonoBehaviour:
   width: 8
   height: 8
   goals:
-  - color: 1
-    amount: 15
-  - color: 0
-    amount: 10
-  horizontalTurns: 8
-  verticalTurns: 6
-  diagonalTurns: 3
+  - color: 3
+    amount: 7
+  - color: 2
+    amount: 9
+  horizontalTurns: 3
+  verticalTurns: 4
+  diagonalTurns: 2
   rotateTurns: 2
   star3MinTurnsLeft: 5
   star2MinTurnsLeft: 2

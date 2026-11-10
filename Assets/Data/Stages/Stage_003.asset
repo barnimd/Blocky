@@ -13,18 +13,16 @@ MonoBehaviour:
   m_Name: Stage_003
   m_EditorClassIdentifier: Blocky::StageData
   stageId: 3
-  width: 9
-  height: 9
+  width: 8
+  height: 8
   goals:
+  - color: 3
+    amount: 10
   - color: 4
-    amount: 25
-  - color: 1
-    amount: 20
-  - color: 0
-    amount: 15
-  horizontalTurns: 8
-  verticalTurns: 8
-  diagonalTurns: 4
-  rotateTurns: 3
-  star3MinTurnsLeft: 7
-  star2MinTurnsLeft: 3
+    amount: 8
+  horizontalTurns: 4
+  verticalTurns: 4
+  diagonalTurns: 3
+  rotateTurns: 2
+  star3MinTurnsLeft: 6
+  star2MinTurnsLeft: 2

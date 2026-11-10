@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEditor;
 
@@ -5,40 +6,43 @@ using UnityEditor;
 public class StageAssetTests
 {
     private const string StageListPath = "Assets/Data/StageList.asset";
+    private const string InfiniteStagePath = "Assets/Data/InfiniteMode.asset";
 
     private static StageList LoadList()
     {
         StageList list = AssetDatabase.LoadAssetAtPath<StageList>(StageListPath);
-        Assert.IsNotNull(list, $"{StageListPath} tidak ditemukan. Jalankan Blocky > Setup Game Scene.");
+        Assert.IsNotNull(list, $"{StageListPath} tidak ditemukan. Jalankan Blocky > Setup All Scenes.");
         return list;
     }
 
     [Test]
-    public void StageList_HasStages()
+    public void StageList_Has5ChaptersOf12Stages()
     {
-        Assert.GreaterOrEqual(LoadList().Count, 1);
+        StageList list = LoadList();
+
+        Assert.AreEqual(60, list.Count);
+        Assert.AreEqual(5, list.ChapterCount);
+
+        for (int chapter = 0; chapter < list.ChapterCount; chapter++)
+        {
+            Assert.IsNotEmpty(list.GetChapterName(chapter), $"Bab {chapter + 1} belum punya nama.");
+        }
     }
 
     [Test]
-    public void Stage1_MatchesGddExample()
+    public void StageAssets_MatchGenerator()
     {
-        StageData stage = LoadList().GetStage(0);
+        StageList list = LoadList();
+        List<StageSpec> specs = StageGenerator.Generate(5, StageList.StagesPerChapter, StageGenerator.DefaultSeed);
 
-        Assert.AreEqual(1, stage.StageId);
-        Assert.AreEqual(8, stage.Width);
-        Assert.AreEqual(8, stage.Height);
-        Assert.AreEqual(2, stage.Goals.Count);
-        Assert.AreEqual(BlockColor.Blue, stage.Goals[0].Color);
-        Assert.AreEqual(15, stage.Goals[0].Amount);
-        Assert.AreEqual(BlockColor.Red, stage.Goals[1].Color);
-        Assert.AreEqual(10, stage.Goals[1].Amount);
-        Assert.AreEqual(8, stage.HorizontalTurns);
-        Assert.AreEqual(6, stage.VerticalTurns);
-        Assert.AreEqual(3, stage.DiagonalTurns);
-        Assert.AreEqual(2, stage.RotateTurns);
-        Assert.AreEqual(19, stage.TotalTurns);
-        Assert.AreEqual(5, stage.Star3MinTurnsLeft);
-        Assert.AreEqual(2, stage.Star2MinTurnsLeft);
+        for (int i = 0; i < list.Count; i++)
+        {
+            StageData stage = list.GetStage(i);
+
+            Assert.AreEqual(specs[i].TotalTurns, stage.TotalTurns, $"Stage {stage.StageId}");
+            Assert.AreEqual(specs[i].Goals.Count, stage.Goals.Count, $"Stage {stage.StageId}");
+            Assert.AreEqual(specs[i].Star3MinTurnsLeft, stage.Star3MinTurnsLeft, $"Stage {stage.StageId}");
+        }
     }
 
     [Test]
@@ -59,5 +63,15 @@ public class StageAssetTests
             Assert.LessOrEqual(stage.Star2MinTurnsLeft, stage.Star3MinTurnsLeft);
             Assert.Less(stage.Star3MinTurnsLeft, stage.TotalTurns);
         }
+    }
+
+    [Test]
+    public void InfiniteStage_HasBoardAndTurns_NoGoals()
+    {
+        StageData stage = AssetDatabase.LoadAssetAtPath<StageData>(InfiniteStagePath);
+
+        Assert.IsNotNull(stage, $"{InfiniteStagePath} tidak ditemukan.");
+        Assert.AreEqual(0, stage.Goals.Count);
+        Assert.Greater(stage.TotalTurns, 0);
     }
 }
