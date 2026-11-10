@@ -51,6 +51,12 @@ public class StageData : ScriptableObject
     [SerializeField, Min(0)] private int star2MinTurnsLeft = 2;
 
     public int StageId => stageId;
+
+    // Bab dan nomor level di dalam bab (mulai dari 1), misal "2-5".
+    public int Chapter => (stageId - 1) / StageList.StagesPerChapter + 1;
+    public int LevelInChapter => (stageId - 1) % StageList.StagesPerChapter + 1;
+    public string DisplayName => $"{Chapter}-{LevelInChapter}";
+
     public int Width => width;
     public int Height => height;
     public IReadOnlyList<ColorGoal> Goals => goals;
