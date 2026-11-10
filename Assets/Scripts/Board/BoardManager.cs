@@ -526,6 +526,24 @@ public class BoardManager : MonoBehaviour
 
     // Khusus test: mengganti warna semua blok dengan pola tertentu.
     // colors[x, y] = index warna.
+    // Salinan warna seluruh board (ColorIndex, -1 = kosong).
+    // Dipakai MoveFinder untuk mengecek papan terkunci.
+    public int[,] GetColorSnapshot()
+    {
+        int[,] colors = new int[width, height];
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Block block = grid != null ? grid[x, y] : null;
+                colors[x, y] = block != null ? block.ColorIndex : -1;
+            }
+        }
+
+        return colors;
+    }
+
     internal void SetColorsForTest(int[,] colors)
     {
         for (int x = 0; x < width; x++)

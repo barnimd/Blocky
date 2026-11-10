@@ -1,13 +1,35 @@
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class HUDManager : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private ActionInventory actionInventory;
     [SerializeField] private ActionTurnSlot[] actionSlots;
+    [SerializeField] private GameManager gameManager;
 
+    [Header("Refresh (Infinite Mode)")]
     [Tooltip("Khusus Infinite Mode. Disembunyikan di Stage Mode.")]
     [SerializeField] private GameObject refreshButton;
+    [SerializeField] private TMP_Text refreshCountText;
+    [SerializeField] private float pulseScale = 1.12f;
+    [SerializeField] private float pulseSpeed = 6f;
+
+    private Button refreshButtonComponent;
+
+    private void Awake()
+    {
+        if (refreshButton != null)
+        {
+            refreshButtonComponent = refreshButton.GetComponent<Button>();
+
+            if (refreshButtonComponent != null)
+            {
+                refreshButtonComponent.onClick.AddListener(HandleRefreshClicked);
+            }
+        }
+    }
 
     private void OnEnable()
     {
@@ -15,6 +37,11 @@ public class HUDManager : MonoBehaviour
         {
             actionInventory.TurnsChanged += HandleTurnsChanged;
             actionInventory.TurnDenied += HandleTurnDenied;
+        }
+
+        if (gameManager != null)
+        {
+            gameManager.RefreshesChanged += HandleRefreshesChanged;
         }
     }
 
@@ -25,14 +52,20 @@ public class HUDManager : MonoBehaviour
             actionInventory.TurnsChanged -= HandleTurnsChanged;
             actionInventory.TurnDenied -= HandleTurnDenied;
         }
+
+        if (gameManager != null)
+        {
+            gameManager.RefreshesChanged -= HandleRefreshesChanged;
+        }
     }
 
     private void Start()
     {
-        // Saat ini hanya ada Stage Mode.
+        // Tombol Refresh hanya muncul di Infinite Mode.
         if (refreshButton != null)
         {
-            refreshButton.SetActive(false);
+            bool isInfinite = gameManager != null && gameManager.IsInfinite;
+            refreshButton.SetActive(isInfinite);
         }
 
         if (actionInventory == null)
@@ -45,6 +78,33 @@ public class HUDManager : MonoBehaviour
         }
 
         RefreshAllSlots();
+
+        if (gameManager != null)
+        {
+            HandleRefreshesChanged(gameManager.RefreshesLeft);
+        }
+    }
+
+    // Saat semua jatah habis dan refresh masih ada, tombol berdenyut
+    // supaya pemain tahu harus menekan Refresh.
+    private void Update()
+    {
+        if (refreshButton == null || !refreshButton.activeSelf)
+        {
+            return;
+        }
+
+        bool needsAttention =
+            gameManager != null &&
+            gameManager.RefreshesLeft > 0 &&
+            actionInventory != null &&
+            actionInventory.AreAllTurnsEmpty();
+
+        float scale = needsAttention
+            ? 1f + (pulseScale - 1f) * (0.5f + 0.5f * Mathf.Sin(Time.time * pulseSpeed))
+            : 1f;
+
+        refreshButton.transform.localScale = Vector3.one * scale;
     }
 
     private void HandleTurnsChanged(ActionType action, int turns)
@@ -64,6 +124,27 @@ public class HUDManager : MonoBehaviour
         if (slot != null)
         {
             slot.PlayDenied();
+        }
+    }
+
+    private void HandleRefreshesChanged(int refreshesLeft)
+    {
+        if (refreshCountText != null && gameManager != null)
+        {
+            refreshCountText.text = $"{refreshesLeft}/{gameManager.MaxRefreshes}";
+        }
+
+        if (refreshButtonComponent != null)
+        {
+            refreshButtonComponent.interactable = refreshesLeft > 0;
+        }
+    }
+
+    private void HandleRefreshClicked()
+    {
+        if (gameManager != null)
+        {
+            gameManager.UseRefresh();
         }
     }
 

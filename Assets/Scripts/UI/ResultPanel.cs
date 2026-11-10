@@ -10,6 +10,7 @@ public class ResultPanel : MonoBehaviour
     [Header("References")]
     [SerializeField] private GameManager gameManager;
     [SerializeField] private ActionInventory actionInventory;
+    [SerializeField] private ScoreManager scoreManager;
 
     [Header("UI")]
     [SerializeField] private TMP_Text titleText;
@@ -17,10 +18,12 @@ public class ResultPanel : MonoBehaviour
     [SerializeField] private StarDisplay stars;
     [SerializeField] private Button retryButton;
     [SerializeField] private Button nextButton;
+    [SerializeField] private Button menuButton;
 
     [Header("Text")]
     [SerializeField] private string victoryTitle = "STAGE CLEAR!";
     [SerializeField] private string gameOverTitle = "OUT OF TURNS";
+    [SerializeField] private string infiniteOverTitle = "NO MORE MOVES";
 
     [Header("Animation")]
     [SerializeField] private float showDelay = 0.25f;
@@ -45,6 +48,11 @@ public class ResultPanel : MonoBehaviour
         if (nextButton != null)
         {
             nextButton.onClick.AddListener(HandleNext);
+        }
+
+        if (menuButton != null)
+        {
+            menuButton.onClick.AddListener(HandleMenu);
         }
     }
 
@@ -101,8 +109,21 @@ public class ResultPanel : MonoBehaviour
 
     private void ShowGameOver()
     {
-        SetTitle(gameOverTitle);
-        SetDetail("Objective not completed.");
+        if (gameManager.IsInfinite)
+        {
+            int score = scoreManager != null ? scoreManager.Score : 0;
+            string best = gameManager.IsNewBestScore
+                ? "NEW BEST!"
+                : $"Best: {StageProgress.InfiniteBest:N0}";
+
+            SetTitle(infiniteOverTitle);
+            SetDetail($"Score: {score:N0}\n{best}");
+        }
+        else
+        {
+            SetTitle(gameOverTitle);
+            SetDetail("Objective not completed.");
+        }
 
         if (stars != null)
         {
@@ -183,5 +204,10 @@ public class ResultPanel : MonoBehaviour
     private void HandleNext()
     {
         gameManager.NextStage();
+    }
+
+    private void HandleMenu()
+    {
+        gameManager.BackToMenu();
     }
 }

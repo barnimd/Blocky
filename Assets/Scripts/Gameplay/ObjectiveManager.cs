@@ -100,6 +100,13 @@ public class ObjectiveManager : MonoBehaviour
         GoalsReset?.Invoke();
     }
 
+    // Infinite Mode: tidak ada target.
+    public void Clear()
+    {
+        goals.Clear();
+        GoalsReset?.Invoke();
+    }
+
     private void HandleMatchesCleared(HashSet<Block> blocks, int combo)
     {
         List<int> colorIndices = new List<int>();

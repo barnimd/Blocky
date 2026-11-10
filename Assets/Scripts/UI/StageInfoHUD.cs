@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 // Top bar: nomor stage, preview bintang, sisa total turn,
-// dan Objective Tracker.
+// Objective Tracker (Stage Mode) atau skor (Infinite Mode),
+// dan tombol kembali ke menu.
 public class StageInfoHUD : MonoBehaviour
 {
     [Header("References")]
@@ -11,6 +13,7 @@ public class StageInfoHUD : MonoBehaviour
     [SerializeField] private ActionInventory actionInventory;
     [SerializeField] private ObjectiveManager objectiveManager;
     [SerializeField] private BoardManager boardManager;
+    [SerializeField] private ScoreManager scoreManager;
 
     [Header("UI")]
     [SerializeField] private TMP_Text stageText;
@@ -18,10 +21,23 @@ public class StageInfoHUD : MonoBehaviour
     [SerializeField] private StarDisplay starPreview;
     [SerializeField] private Transform goalContainer;
     [SerializeField] private ObjectiveGoalItem goalItemPrefab;
+    [SerializeField] private Button menuButton;
+
+    [Header("Infinite Mode")]
+    [SerializeField] private TMP_Text objectiveLabel;
+    [SerializeField] private TMP_Text scoreText;
 
     private readonly List<ObjectiveGoalItem> goalItems = new List<ObjectiveGoalItem>();
 
     public IReadOnlyList<ObjectiveGoalItem> GoalItems => goalItems;
+
+    private void Awake()
+    {
+        if (menuButton != null)
+        {
+            menuButton.onClick.AddListener(HandleMenuClicked);
+        }
+    }
 
     private void OnEnable()
     {
@@ -39,6 +55,11 @@ public class StageInfoHUD : MonoBehaviour
         {
             objectiveManager.GoalsReset += RebuildGoals;
             objectiveManager.GoalProgressChanged += HandleGoalProgressChanged;
+        }
+
+        if (scoreManager != null)
+        {
+            scoreManager.ScoreChanged += HandleScoreChanged;
         }
     }
 
@@ -59,13 +80,43 @@ public class StageInfoHUD : MonoBehaviour
             objectiveManager.GoalsReset -= RebuildGoals;
             objectiveManager.GoalProgressChanged -= HandleGoalProgressChanged;
         }
+
+        if (scoreManager != null)
+        {
+            scoreManager.ScoreChanged -= HandleScoreChanged;
+        }
     }
 
     private void HandleStageLoaded(StageData stage)
     {
+        bool isInfinite = gameManager.IsInfinite;
+
         if (stageText != null)
         {
-            stageText.text = $"STAGE {stage.StageId}";
+            stageText.text = isInfinite ? "INFINITE" : $"STAGE {stage.DisplayName}";
+        }
+
+        // Infinite: target diganti skor, preview bintang disembunyikan.
+        if (goalContainer != null)
+        {
+            goalContainer.gameObject.SetActive(!isInfinite);
+        }
+
+        if (scoreText != null)
+        {
+            scoreText.gameObject.SetActive(isInfinite);
+        }
+
+        if (starPreview != null)
+        {
+            starPreview.gameObject.SetActive(!isInfinite);
+        }
+
+        if (objectiveLabel != null)
+        {
+            objectiveLabel.text = isInfinite
+                ? $"SCORE   ·   BEST {StageProgress.InfiniteBest}"
+                : "OBJECTIVE";
         }
 
         RefreshTurns();
@@ -91,9 +142,18 @@ public class StageInfoHUD : MonoBehaviour
             turnsText.text = turnsLeft.ToString();
         }
 
-        if (starPreview != null && gameManager != null && gameManager.CurrentStage != null)
+        if (starPreview != null && gameManager != null &&
+            gameManager.CurrentStage != null && !gameManager.IsInfinite)
         {
             starPreview.SetStars(gameManager.CurrentStage.GetStars(turnsLeft));
+        }
+    }
+
+    private void HandleScoreChanged(int score)
+    {
+        if (scoreText != null)
+        {
+            scoreText.text = score.ToString("N0");
         }
     }
 
@@ -151,5 +211,13 @@ public class StageInfoHUD : MonoBehaviour
         }
 
         return -1;
+    }
+
+    private void HandleMenuClicked()
+    {
+        if (gameManager != null)
+        {
+            gameManager.BackToMenu();
+        }
     }
 }

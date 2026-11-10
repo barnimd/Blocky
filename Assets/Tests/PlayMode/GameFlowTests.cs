@@ -22,16 +22,45 @@ public class GameFlowTests
     private StageInfoHUD stageHud;
     private ResultPanel result;
 
+    // Test memakai prefix sendiri supaya progres asli tidak tertimpa.
+    private const string TestPrefix = "blocky.test.";
+    private const int MaxStageId = 100;
+
+    private StageData Stage => game.CurrentStage;
+
     [UnitySetUp]
     public IEnumerator SetUp()
     {
+        StageProgress.KeyPrefix = TestPrefix;
+        StageProgress.ClearAll(MaxStageId);
+
         GameManager.ResetStageIndex();
         yield return LoadGameScene();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        StageProgress.ClearAll(MaxStageId);
+        StageProgress.KeyPrefix = "blocky.";
+        GameManager.ResetStageIndex();
     }
 
     private IEnumerator LoadGameScene()
     {
         SceneManager.LoadScene(SceneName);
+        yield return WaitForGameScene();
+    }
+
+    private IEnumerator StartInfinite()
+    {
+        GameSession.StartInfinite();
+        yield return WaitForGameScene();
+        Assert.IsTrue(game.IsInfinite);
+    }
+
+    private IEnumerator WaitForGameScene()
+    {
         yield return null;
 
         float time = 0f;
@@ -160,28 +189,40 @@ public class GameFlowTests
         return found.GetComponent<TMP_Text>().text;
     }
 
+    // GameObject.Find dengan path tetap menemukan child yang nonaktif,
+    // jadi cek juga activeInHierarchy untuk tahu apakah benar tampil.
+    private static bool IsShown(string path)
+    {
+        GameObject found = GameObject.Find(path);
+        return found != null && found.activeInHierarchy;
+    }
+
     // ───────────── Tests ─────────────
 
     [UnityTest]
     public IEnumerator Stage1_LoadsFromStageData()
     {
         Assert.AreEqual(GameState.PlayerInput, game.State);
-        Assert.AreEqual(1, game.CurrentStage.StageId);
+        Assert.IsFalse(game.IsInfinite);
+        Assert.AreEqual(1, Stage.StageId);
 
-        Assert.AreEqual(8, board.Width);
-        Assert.AreEqual(8, board.Height);
-        Assert.IsNotNull(board.GetBlock(7, 7));
+        Assert.AreEqual(Stage.Width, board.Width);
+        Assert.AreEqual(Stage.Height, board.Height);
+        Assert.IsNotNull(board.GetBlock(board.Width - 1, board.Height - 1));
         Assert.AreEqual(0, board.FindMatches().Count, "Board awal tidak boleh punya match.");
 
-        Assert.AreEqual(8, inventory.HorizontalTurns);
-        Assert.AreEqual(6, inventory.VerticalTurns);
-        Assert.AreEqual(3, inventory.DiagonalTurns);
-        Assert.AreEqual(2, inventory.RotateTurns);
-        Assert.AreEqual(19, inventory.TotalTurns);
+        Assert.AreEqual(Stage.HorizontalTurns, inventory.HorizontalTurns);
+        Assert.AreEqual(Stage.VerticalTurns, inventory.VerticalTurns);
+        Assert.AreEqual(Stage.DiagonalTurns, inventory.DiagonalTurns);
+        Assert.AreEqual(Stage.RotateTurns, inventory.RotateTurns);
+        Assert.AreEqual(Stage.TotalTurns, inventory.TotalTurns);
 
-        Assert.AreEqual(2, objectives.Goals.Count);
-        Assert.AreEqual(15, objectives.Goals[0].Remaining);
-        Assert.AreEqual(10, objectives.Goals[1].Remaining);
+        Assert.AreEqual(Stage.Goals.Count, objectives.Goals.Count);
+
+        for (int i = 0; i < Stage.Goals.Count; i++)
+        {
+            Assert.AreEqual(Stage.Goals[i].Amount, objectives.Goals[i].Remaining);
+        }
 
         Assert.IsTrue(input.CanInteract);
         Assert.IsFalse(result.IsShown);
@@ -191,22 +232,23 @@ public class GameFlowTests
     [UnityTest]
     public IEnumerator Hud_ShowsStageTurnsObjectiveAndStars()
     {
-        Assert.AreEqual("STAGE 1", TextAt("Canvas/TopBar/StageText"));
-        Assert.AreEqual("19", TextAt("Canvas/TopBar/TurnPanel/CountText"));
+        Assert.AreEqual("STAGE 1-1", TextAt("Canvas/TopBar/StageText"));
+        Assert.AreEqual(Stage.TotalTurns.ToString(), TextAt("Canvas/TopBar/TurnPanel/CountText"));
 
-        Assert.AreEqual(2, stageHud.GoalItems.Count);
-        Assert.AreEqual(BlockColor.Blue, stageHud.GoalItems[0].GoalColor);
-        Assert.AreEqual("15", stageHud.GoalItems[0].RemainingLabel);
-        Assert.AreEqual("10", stageHud.GoalItems[1].RemainingLabel);
+        Assert.AreEqual(Stage.Goals.Count, stageHud.GoalItems.Count);
+        Assert.AreEqual(Stage.Goals[0].Color, stageHud.GoalItems[0].GoalColor);
+        Assert.AreEqual(Stage.Goals[0].Amount.ToString(), stageHud.GoalItems[0].RemainingLabel);
 
         StarDisplay preview = GameObject.Find("Canvas/TopBar/StarPreview").GetComponent<StarDisplay>();
-        Assert.AreEqual(3, preview.ShownStars);
+        Assert.AreEqual(3, preview.ShownStars, "Turn masih penuh = preview 3 bintang.");
 
-        Assert.AreEqual("8", TextAt("Canvas/BottomBar/HorizontalAction/CountText"));
-        Assert.AreEqual("2", TextAt("Canvas/BottomBar/RotateAction/CountText"));
+        Assert.AreEqual(Stage.HorizontalTurns.ToString(), TextAt("Canvas/BottomBar/HorizontalAction/CountText"));
+        Assert.AreEqual(Stage.RotateTurns.ToString(), TextAt("Canvas/BottomBar/RotateAction/CountText"));
 
-        Assert.IsNull(GameObject.Find("Canvas/BottomBar/RefreshButton"),
+        Assert.IsFalse(IsShown("Canvas/TopBar/RefreshButton"),
             "Refresh button harus disembunyikan di Stage Mode.");
+        Assert.IsFalse(IsShown("Canvas/TopBar/ObjectivePanel/ScoreText"),
+            "Skor hanya tampil di Infinite Mode.");
         yield break;
     }
 
@@ -249,15 +291,15 @@ public class GameFlowTests
         Assert.IsTrue(input.TrySwapCells(from, to));
         Assert.AreEqual(GameState.Resolving, game.State);
         Assert.IsFalse(input.CanInteract, "Input harus terkunci selama resolve.");
-        Assert.AreEqual(7, inventory.HorizontalTurns);
-        Assert.AreEqual("18", TextAt("Canvas/TopBar/TurnPanel/CountText"));
+        Assert.AreEqual(Stage.HorizontalTurns - 1, inventory.HorizontalTurns);
+        Assert.AreEqual((Stage.TotalTurns - 1).ToString(), TextAt("Canvas/TopBar/TurnPanel/CountText"));
 
         yield return WaitForSettled();
 
         Assert.IsTrue(settled);
         Assert.AreEqual(GameState.PlayerInput, game.State);
         Assert.AreSame(first, board.GetBlock(to.x, to.y), "Blok harus pindah, walau tanpa match.");
-        Assert.AreEqual(18, inventory.TotalTurns);
+        Assert.AreEqual(Stage.TotalTurns - 1, inventory.TotalTurns);
     }
 
     [UnityTest]
@@ -325,8 +367,8 @@ public class GameFlowTests
         yield return WaitForSettled();
 
         Assert.AreEqual(GameState.Victory, game.State);
-        Assert.AreEqual(18, inventory.TotalTurns);
-        Assert.AreEqual(3, game.StarsEarned);
+        Assert.AreEqual(Stage.TotalTurns - 1, inventory.TotalTurns);
+        Assert.AreEqual(3, game.StarsEarned, "Ambang 3 bintang selalu < total turn.");
         Assert.IsTrue(objectives.IsComplete);
         Assert.AreEqual("0", stageHud.GoalItems[0].RemainingLabel);
 
@@ -334,6 +376,9 @@ public class GameFlowTests
         Assert.AreEqual("STAGE CLEAR!", result.Title);
         Assert.IsTrue(result.IsNextVisible, "Stage 1 punya stage berikutnya.");
         Assert.IsFalse(input.CanInteract, "Input terkunci setelah menang.");
+
+        // Bintang tersimpan dan stage 2 terbuka.
+        Assert.AreEqual(3, StageProgress.GetStars(1));
     }
 
     [UnityTest]
@@ -379,40 +424,132 @@ public class GameFlowTests
         (Vector2Int from, Vector2Int to) = FindNoMatchSwap(colors);
         input.TrySwapCells(from, to);
         yield return WaitForSettled();
-        Assert.AreEqual(18, inventory.TotalTurns);
+        int fullTurns = Stage.TotalTurns;
+        Assert.AreEqual(fullTurns - 1, inventory.TotalTurns);
 
         game.RetryStage();
-        yield return LoadGameScene();
+        yield return WaitForGameScene();
 
-        Assert.AreEqual(1, game.CurrentStage.StageId);
-        Assert.AreEqual(19, inventory.TotalTurns);
+        Assert.AreEqual(1, Stage.StageId);
+        Assert.AreEqual(fullTurns, inventory.TotalTurns);
         Assert.AreEqual(GameState.PlayerInput, game.State);
     }
 
     [UnityTest]
-    public IEnumerator NextStage_LoadsStage2_ThenStage3With9x9Board()
+    public IEnumerator NextStage_LoadsStage2()
     {
         Assert.IsTrue(game.HasNextStage);
         game.NextStage();
-        yield return LoadGameScene();
+        yield return WaitForGameScene();
 
-        Assert.AreEqual(2, game.CurrentStage.StageId);
-        Assert.AreEqual("STAGE 2", TextAt("Canvas/TopBar/StageText"));
-        Assert.AreEqual(game.CurrentStage.TotalTurns, inventory.TotalTurns);
-        Assert.AreEqual(game.CurrentStage.Goals.Count, stageHud.GoalItems.Count);
+        Assert.AreEqual(2, Stage.StageId);
+        Assert.AreEqual("STAGE 1-2", TextAt("Canvas/TopBar/StageText"));
+        Assert.AreEqual(Stage.TotalTurns, inventory.TotalTurns);
+        Assert.AreEqual(Stage.Goals.Count, stageHud.GoalItems.Count);
+        Assert.AreEqual(Stage.Width, board.Width);
+    }
 
-        game.NextStage();
-        yield return LoadGameScene();
+    [UnityTest]
+    public IEnumerator LastStage_HasNoNextStage_AndBoardFitsCamera()
+    {
+        GameSession.StartStage(59);
+        yield return WaitForGameScene();
 
-        Assert.AreEqual(3, game.CurrentStage.StageId);
-        Assert.AreEqual(9, board.Width);
-        Assert.AreEqual(9, board.Height);
-        Assert.IsNotNull(board.GetBlock(8, 8));
+        Assert.AreEqual(60, Stage.StageId);
+        Assert.AreEqual("STAGE 5-12", TextAt("Canvas/TopBar/StageText"));
+        Assert.IsFalse(game.HasNextStage, "Stage 60 = stage terakhir.");
+        Assert.IsNotNull(board.GetBlock(board.Width - 1, board.Height - 1));
         Assert.AreEqual(0, board.FindMatches().Count);
-        Assert.IsFalse(game.HasNextStage, "Stage 3 = stage terakhir.");
 
         Camera camera = Camera.main;
         Assert.LessOrEqual(board.BoardWorldSize.x, camera.orthographicSize * 2f * camera.aspect + 0.001f);
+    }
+
+    // ───────────── Infinite Mode ─────────────
+
+    [UnityTest]
+    public IEnumerator Infinite_ShowsScoreAndRefresh_NoObjective()
+    {
+        yield return StartInfinite();
+
+        Assert.AreEqual("INFINITE", TextAt("Canvas/TopBar/StageText"));
+        Assert.AreEqual(0, objectives.Goals.Count);
+        Assert.IsTrue(IsShown("Canvas/TopBar/ObjectivePanel/ScoreText"));
+        Assert.IsTrue(IsShown("Canvas/TopBar/RefreshButton"));
+        Assert.AreEqual("2/2", TextAt("Canvas/TopBar/RefreshButton/CountText"));
+        Assert.AreEqual(2, game.RefreshesLeft);
+    }
+
+    [UnityTest]
+    public IEnumerator Infinite_Match_AddsScore()
+    {
+        yield return StartInfinite();
+
+        ScoreManager score = Object.FindFirstObjectByType<ScoreManager>();
+        ApplyPattern(BlueMatchPattern(board.Width, board.Height));
+
+        Assert.IsTrue(input.TrySwapCells(new Vector2Int(0, 2), new Vector2Int(1, 2)));
+        yield return WaitForSettled();
+
+        Assert.Greater(score.Score, 0);
+        Assert.AreEqual(score.Score.ToString("N0"), TextAt("Canvas/TopBar/ObjectivePanel/ScoreText"));
+        Assert.AreNotEqual(GameState.Victory, game.State, "Infinite Mode tidak pernah menang.");
+    }
+
+    [UnityTest]
+    public IEnumerator Infinite_Refresh_RestoresStartingTurns()
+    {
+        yield return StartInfinite();
+
+        int fullTurns = inventory.TotalTurns;
+        inventory.ResetInventory(0, 0, 0, 1);
+
+        Assert.IsTrue(game.UseRefresh());
+        Assert.AreEqual(fullTurns, inventory.TotalTurns);
+        Assert.AreEqual(1, game.RefreshesLeft);
+        Assert.AreEqual("1/2", TextAt("Canvas/TopBar/RefreshButton/CountText"));
+
+        Assert.IsTrue(game.UseRefresh());
+        Assert.IsFalse(game.UseRefresh(), "Refresh hanya 2x per sesi.");
+        Assert.AreEqual(0, game.RefreshesLeft);
+    }
+
+    [UnityTest]
+    public IEnumerator Infinite_EmptyTurnsWithoutRefresh_AutoRandomizes()
+    {
+        yield return StartInfinite();
+
+        game.UseRefresh();
+        game.UseRefresh();
+
+        // Pola ini masih punya gerakan match (swap Biru), jadi tidak terkunci.
+        ApplyPattern(BlueMatchPattern(board.Width, board.Height));
+        inventory.ResetInventory(1, 0, 0, 0);
+
+        Assert.IsTrue(input.TrySwapCells(new Vector2Int(5, 6), new Vector2Int(6, 6)));
+        yield return WaitForSettled();
+
+        Assert.AreEqual(GameState.PlayerInput, game.State);
+        Assert.GreaterOrEqual(inventory.TotalTurns, 10, "Jatah harus diacak ulang.");
+        Assert.Greater(inventory.HorizontalTurns, 0);
+        Assert.Greater(inventory.RotateTurns, 0);
+    }
+
+    [UnityTest]
+    public IEnumerator Infinite_LockedBoard_IsGameOverWithScore()
+    {
+        yield return StartInfinite();
+
+        // Pola (x + 2y) % 5 tidak punya satu pun gerakan yang membuat match.
+        ApplyPattern(SafePattern(board.Width, board.Height));
+
+        Assert.IsTrue(input.TrySwapCells(new Vector2Int(0, 0), new Vector2Int(1, 0)));
+        yield return WaitForSettled();
+
+        Assert.AreEqual(GameState.GameOver, game.State);
+        Assert.IsTrue(result.IsShown);
+        Assert.AreEqual("NO MORE MOVES", result.Title);
+        Assert.IsFalse(result.IsNextVisible);
     }
 
     [UnityTest]
