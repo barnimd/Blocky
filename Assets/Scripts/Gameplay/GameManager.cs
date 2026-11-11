@@ -4,6 +4,14 @@ using UnityEngine.SceneManagement;
 // State utama game (GDD 6.2).
 // ValidateTurn & ExecuteMove terjadi di BoardInput dalam satu frame,
 // ProcessMatch & Cascading = Resolving (coroutine BoardManager).
+// Kenapa run Infinite Mode berakhir (dipakai panel hasil).
+public enum InfiniteEndReason
+{
+    None,
+    BoardLocked,   // Tidak ada gerakan yang bisa membuat match.
+    OutOfTurns     // Jatah turn habis dan refresh juga habis.
+}
+
 public enum GameState
 {
     Init,
@@ -22,8 +30,6 @@ public class GameManager : MonoBehaviour
     [Tooltip("Ukuran board & jatah turn awal Infinite Mode (tanpa target).")]
     [SerializeField] private StageData infiniteStage;
     [SerializeField, Min(0)] private int maxRefreshes = 2;
-    [SerializeField, Min(4)] private int randomTurnsMin = 10;
-    [SerializeField, Min(4)] private int randomTurnsMax = 16;
 
     [Header("References")]
     [SerializeField] private BoardManager boardManager;
@@ -32,9 +38,6 @@ public class GameManager : MonoBehaviour
     [SerializeField] private ScoreManager scoreManager;
     [SerializeField] private BoardCameraFitter cameraFitter;
     [SerializeField] private RunTimer runTimer;
-
-    // Bobot Auto-Randomize: H paling banyak, Rotate paling langka.
-    private static readonly float[] RandomTurnWeights = { 0.36f, 0.30f, 0.20f, 0.14f };
 
     public GameState State { get; private set; } = GameState.Init;
     public GameMode Mode => GameSession.Mode;
@@ -46,6 +49,7 @@ public class GameManager : MonoBehaviour
     public int RefreshesLeft { get; private set; }
     public int MaxRefreshes => maxRefreshes;
     public bool IsNewBestScore { get; private set; }
+    public InfiniteEndReason EndReason { get; private set; }
 
     // Lama permainan Infinite Mode (stopwatch), dalam detik.
     public float RunSeconds => runTimer != null ? runTimer.Elapsed : 0f;
@@ -170,6 +174,7 @@ public class GameManager : MonoBehaviour
         CurrentStage = infiniteStage;
         StarsEarned = 0;
         IsNewBestScore = false;
+        EndReason = InfiniteEndReason.None;
         RefreshesLeft = maxRefreshes;
 
         if (!PrepareBoard(CurrentStage))
@@ -282,31 +287,42 @@ public class GameManager : MonoBehaviour
         SetState(GameState.PlayerInput);
     }
 
-    // GDD 3.2: kalah hanya jika papan terkunci (tidak ada satu pun
-    // gerakan yang bisa membuat match). Jatah habis & refresh habis
-    // = Auto-Randomize jatah baru, permainan lanjut.
+    // Infinite Mode berakhir jika:
+    // - papan terkunci (tidak ada satu pun gerakan yang bisa membuat match), atau
+    // - jatah turn habis DAN refresh (2x) sudah dipakai semua.
     private void CheckInfiniteCondition()
     {
         if (!MoveFinder.HasAnyMatchingMove(boardManager.GetColorSnapshot()))
         {
-            int score = scoreManager != null ? scoreManager.Score : 0;
-            int seconds = Mathf.FloorToInt(RunSeconds);
-            IsNewBestScore = StageProgress.SaveInfiniteBest(score, seconds);
-
-            Debug.Log(
-                $"Infinite Mode selesai: papan terkunci. " +
-                $"Skor {score}, waktu {RunTimer.Format(seconds)}."
-            );
-            SetState(GameState.GameOver);
+            EndInfiniteRun(InfiniteEndReason.BoardLocked);
             return;
         }
 
+        // Turn habis + refresh habis = game over (tidak ada turn tambahan).
+        // Jika refresh masih ada, pemain harus menekan Refresh dulu.
         if (actionInventory.AreAllTurnsEmpty() && RefreshesLeft == 0)
         {
-            RandomizeTurns();
+            EndInfiniteRun(InfiniteEndReason.OutOfTurns);
+            return;
         }
 
         SetState(GameState.PlayerInput);
+    }
+
+    private void EndInfiniteRun(InfiniteEndReason reason)
+    {
+        EndReason = reason;
+
+        int score = scoreManager != null ? scoreManager.Score : 0;
+        int seconds = Mathf.FloorToInt(RunSeconds);
+        IsNewBestScore = StageProgress.SaveInfiniteBest(score, seconds);
+
+        Debug.Log(
+            $"Infinite Mode selesai ({reason}). " +
+            $"Skor {score}, waktu {RunTimer.Format(seconds)}."
+        );
+
+        SetState(GameState.GameOver);
     }
 
     // Tombol Refresh: isi ulang jatah turn ke nilai awal.
@@ -323,24 +339,6 @@ public class GameManager : MonoBehaviour
         Debug.Log($"Refresh dipakai. Sisa refresh: {RefreshesLeft}.");
         RefreshesChanged?.Invoke(RefreshesLeft);
         return true;
-    }
-
-    private void RandomizeTurns()
-    {
-        float[] weights = new float[RandomTurnWeights.Length];
-
-        for (int i = 0; i < weights.Length; i++)
-        {
-            weights[i] = RandomTurnWeights[i] * Random.Range(0.6f, 1.4f);
-        }
-
-        int max = Mathf.Max(randomTurnsMin, randomTurnsMax);
-        int total = Random.Range(randomTurnsMin, max + 1);
-        int[] turns = StageGenerator.SplitTurns(total, weights);
-
-        actionInventory.ResetInventory(turns[0], turns[1], turns[2], turns[3]);
-
-        Debug.Log($"Auto-Randomize: H{turns[0]} V{turns[1]} D{turns[2]} R{turns[3]}.");
     }
 
     private void SetState(GameState newState)

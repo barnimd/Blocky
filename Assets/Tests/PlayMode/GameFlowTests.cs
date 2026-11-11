@@ -531,7 +531,7 @@ public class GameFlowTests
     }
 
     [UnityTest]
-    public IEnumerator Infinite_EmptyTurnsWithoutRefresh_AutoRandomizes()
+    public IEnumerator Infinite_OutOfTurnsAndRefreshes_IsGameOver()
     {
         yield return StartInfinite();
 
@@ -545,10 +545,31 @@ public class GameFlowTests
         Assert.IsTrue(input.TrySwapCells(new Vector2Int(5, 6), new Vector2Int(6, 6)));
         yield return WaitForSettled();
 
+        Assert.AreEqual(GameState.GameOver, game.State, "Tidak ada turn tambahan setelah refresh habis.");
+        Assert.AreEqual(InfiniteEndReason.OutOfTurns, game.EndReason);
+        Assert.AreEqual(0, inventory.TotalTurns);
+        Assert.IsTrue(result.IsShown);
+        Assert.AreEqual("OUT OF TURNS", result.Title);
+        StringAssert.Contains("Time: ", result.Detail);
+    }
+
+    [UnityTest]
+    public IEnumerator Infinite_OutOfTurnsWithRefreshLeft_WaitsForRefresh()
+    {
+        yield return StartInfinite();
+
+        ApplyPattern(BlueMatchPattern(board.Width, board.Height));
+        inventory.ResetInventory(1, 0, 0, 0);
+
+        Assert.IsTrue(input.TrySwapCells(new Vector2Int(5, 6), new Vector2Int(6, 6)));
+        yield return WaitForSettled();
+
+        // Refresh masih 2: game lanjut, pemain harus menekan Refresh.
         Assert.AreEqual(GameState.PlayerInput, game.State);
-        Assert.GreaterOrEqual(inventory.TotalTurns, 10, "Jatah harus diacak ulang.");
-        Assert.Greater(inventory.HorizontalTurns, 0);
-        Assert.Greater(inventory.RotateTurns, 0);
+        Assert.AreEqual(0, inventory.TotalTurns);
+
+        Assert.IsTrue(game.UseRefresh());
+        Assert.AreEqual(Stage.TotalTurns, inventory.TotalTurns);
     }
 
     [UnityTest]
@@ -565,6 +586,7 @@ public class GameFlowTests
         Assert.AreEqual(GameState.GameOver, game.State);
         Assert.IsTrue(result.IsShown);
         Assert.AreEqual("NO MORE MOVES", result.Title);
+        Assert.AreEqual(InfiniteEndReason.BoardLocked, game.EndReason);
         Assert.IsFalse(result.IsNextVisible);
         StringAssert.Contains("Time: ", result.Detail);
     }

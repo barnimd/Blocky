@@ -37,7 +37,7 @@ public static class BlockyTutorialSetup
                 play),
             new TutorialStep(
                 "INFINITE MODE",
-                "No objective. Score as high as you can until the board locks, " +
+                "No objective. Score as high as you can before your turns run out, " +
                 "beat the clock and climb the global leaderboard.",
                 infinite),
             new TutorialStep(
@@ -103,12 +103,13 @@ public static class BlockyTutorialSetup
                 objective),
             new TutorialStep(
                 "REFRESH",
-                "Out of action turns? Tap Refresh to refill them (2 per run). " +
-                "After that, you get a random set of turns instead.",
+                "Out of action turns? Tap Refresh to refill them. " +
+                "You only get 2 per run, so make every turn count!",
                 refresh),
             new TutorialStep(
                 "GAME OVER",
-                "The run ends when no move can make a match. " +
+                "The run ends when your turns and refreshes are all used up, " +
+                "or when no move can make a match. " +
                 "Then tap RANKS to submit your score to the global leaderboard!",
                 boardArea, TutorialCardPlacement.Bottom)
         });

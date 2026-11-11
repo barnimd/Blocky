@@ -129,7 +129,6 @@ public static class StageGenerator
     }
 
     // Membagi total turn sesuai bobot. Setiap aksi minimal dapat 1.
-    // Dipakai juga Infinite Mode untuk Auto-Randomize.
     public static int[] SplitTurns(int total, float[] weights)
     {
         int count = weights.Length;

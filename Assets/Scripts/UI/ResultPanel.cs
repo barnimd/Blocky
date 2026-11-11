@@ -42,6 +42,7 @@ public class ResultPanel : MonoBehaviour
     [SerializeField] private string victoryTitle = "STAGE CLEAR!";
     [SerializeField] private string gameOverTitle = "OUT OF TURNS";
     [SerializeField] private string infiniteOverTitle = "NO MORE MOVES";
+    [SerializeField] private string infiniteOutOfTurnsTitle = "OUT OF TURNS";
 
     [Header("Animation")]
     [SerializeField] private float showDelay = 0.25f;
@@ -188,7 +189,9 @@ public class ResultPanel : MonoBehaviour
                 ? "NEW BEST!"
                 : $"Best: {StageProgress.InfiniteBest:N0}";
 
-            SetTitle(infiniteOverTitle);
+            SetTitle(gameManager.EndReason == InfiniteEndReason.OutOfTurns
+                ? infiniteOutOfTurnsTitle
+                : infiniteOverTitle);
             SetDetail($"Score: {score:N0}\nTime: {RunTimer.Format(gameManager.RunSeconds)}\n{best}");
         }
         else
