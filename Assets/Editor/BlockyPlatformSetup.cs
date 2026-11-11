@@ -13,6 +13,7 @@ public static class BlockyPlatformSetup
     // Ukuran canvas web di itch.io: portrait, setengah dari 1080x1920.
     private const int WebWidth = 540;
     private const int WebHeight = 960;
+    private const string WebTemplate = "PROJECT:Blocky";
 
     [MenuItem("Blocky/Apply Platform Settings")]
     public static void Run()
@@ -58,5 +59,10 @@ public static class BlockyPlatformSetup
 
         PlayerSettings.defaultWebScreenWidth = WebWidth;
         PlayerSettings.defaultWebScreenHeight = WebHeight;
+
+        // Template sendiri di Assets/WebGLTemplates/Blocky (tanpa footer Unity).
+        // Catatan: Build Profile "Web" punya Player Settings override sendiri,
+        // jadi template juga harus dipilih di profile tersebut.
+        PlayerSettings.WebGL.template = WebTemplate;
     }
 }

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <!--
+      Template WebGL Blocky: tanpa footer Unity (logo, judul, tombol fullscreen).
+      - Canvas mengisi layar dengan rasio portrait (9:16 sampai 9:21),
+        sisa layar diisi warna latar game.
+      - Loading screen bergaya game: 5 blok warna + progress bar.
+      - Fullscreen memakai tombol bawaan itch.io.
+    -->
+    <style>
+      :root {
+        --bg: #1a1f42;      /* sama dengan warna kamera game */
+        --panel: #141a33;
+        --text: #e8ecff;
+        --muted: #9aa3d1;
+        --red: #ff4059; --blue: #26bfff; --green: #8ce633; --yellow: #ffcc26; --purple: #b34dff;
+      }
+      html, body {
+        margin: 0; height: 100%; overflow: hidden;
+        background: var(--bg); color: var(--text);
+        font-family: "Arial Rounded MT Bold", "Nunito", "Segoe UI", system-ui, sans-serif;
+        overscroll-behavior: none;
+        -webkit-user-select: none; user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+
+      /* Lebar: penuh, tapi tidak lebih lebar dari 9:16.
+         Tinggi: penuh, tapi tidak lebih tinggi dari 9:21 (HP panjang tetap penuh). */
+      #game {
+        position: relative;
+        width: min(100vw, calc(100vh * 9 / 16));
+        height: min(100vh, calc(100vw * 21 / 9));
+      }
+      @supports (height: 100dvh) {
+        #game {
+          width: min(100vw, calc(100dvh * 9 / 16));
+          height: min(100dvh, calc(100vw * 21 / 9));
+        }
+      }
+      #unity-canvas {
+        display: block; width: 100%; height: 100%;
+        background: var(--bg); outline: none; touch-action: none;
+      }
+
+      /* ── Loading ── */
+      #loading {
+        position: absolute; inset: 0; display: grid; place-content: center;
+        justify-items: center; gap: 22px; background: var(--bg);
+        transition: opacity .35s ease;
+      }
+      #loading.done { opacity: 0; pointer-events: none; }
+      .blocks { display: flex; gap: 10px; }
+      .blocks i {
+        width: 38px; height: 38px; border-radius: 7px;
+        border: 5px solid rgba(0, 0, 0, .28); box-sizing: border-box;
+        animation: hop 1.2s ease-in-out infinite;
+      }
+      .blocks i:nth-child(1) { background: var(--red);    animation-delay: 0s;   }
+      .blocks i:nth-child(2) { background: var(--blue);   animation-delay: .1s;  }
+      .blocks i:nth-child(3) { background: var(--green);  animation-delay: .2s;  }
+      .blocks i:nth-child(4) { background: var(--yellow); animation-delay: .3s;  }
+      .blocks i:nth-child(5) { background: var(--purple); animation-delay: .4s;  }
+      @keyframes hop {
+        0%, 60%, 100% { transform: translateY(0) rotate(0); }
+        30% { transform: translateY(-12px) rotate(8deg); }
+      }
+      .title { font-size: 34px; font-weight: 900; letter-spacing: .02em; line-height: 1; text-align: center; }
+      .title small { display: block; font-size: 12px; letter-spacing: .6em; margin-top: 8px; color: var(--muted); }
+      .bar { width: 220px; height: 12px; border-radius: 6px; background: var(--panel); overflow: hidden; }
+      .bar span {
+        display: block; height: 100%; width: 0%;
+        background: linear-gradient(90deg, var(--red), var(--yellow), var(--green), var(--blue), var(--purple));
+        transition: width .2s ease;
+      }
+      #percent { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+      /* ── Pesan error / warning dari Unity ── */
+      #banner {
+        position: absolute; left: 12px; right: 12px; bottom: 12px;
+        display: grid; gap: 8px; pointer-events: none;
+      }
+      #banner div {
+        background: var(--panel); border-left: 4px solid var(--yellow);
+        padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;
+      }
+      #banner div.error { border-left-color: var(--red); pointer-events: auto; }
+
+      @media (prefers-reduced-motion: reduce) { .blocks i { animation: none; } }
+    </style>
+#if SHOW_DIAGNOSTICS
+    <link rel="stylesheet" href="<<<TemplateData/diagnostics.css>>>">
+    <script src="<<<TemplateData/diagnostics.js>>>"></script>
+#endif
+#if DEVELOPMENT_PLAYER
+    <script src="<<<TemplateData/profiler.js>>>"></script>
+#endif
+  </head>
+  <body>
+    <div id="stage">
+      <div id="game">
+        <canvas id="unity-canvas" width="{{{ WIDTH }}}" height="{{{ HEIGHT }}}" tabindex="-1"></canvas>
+
+        <div id="loading" aria-live="polite">
+          <div class="blocks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="title">COLOR SHIFT<small>PUZZLE</small></div>
+          <div class="bar"><span id="progress"></span></div>
+          <div id="percent">Loading 0%</div>
+        </div>
+
+        <div id="banner"></div>
+      </div>
+    </div>
+
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+      var loading = document.querySelector("#loading");
+      var progressBar = document.querySelector("#progress");
+      var percentText = document.querySelector("#percent");
+
+      // Warning hilang sendiri setelah 5 detik, error tetap tampil.
+      function showBanner(msg, type) {
+        var banner = document.querySelector("#banner");
+        var div = document.createElement("div");
+        div.textContent = msg;
+        if (type == "error") div.className = "error";
+        banner.appendChild(div);
+        if (type != "error") {
+          setTimeout(function () { div.remove(); }, 5000);
+        }
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        arguments: [],
+#if PROGRESSIVE_ASSET_LOADING
+        primaryDataUrls: {{{ JSON.stringify(PRIMARY_DATA_FILES) }}},
+        secondaryDataUrls: {{{ JSON.stringify(SECONDARY_DATA_FILES) }}},
+#else
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+#endif
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_WASM
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: showBanner,
+
+        // Layar HP sering DPR 3: dibatasi 2 supaya tetap tajam tapi lebih ringan.
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+      };
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          var pct = Math.round(progress * 100);
+          progressBar.style.width = pct + "%";
+          percentText.textContent = "Loading " + pct + "%";
+        }).then(function (unityInstance) {
+          loading.classList.add("done");
+          canvas.focus();
+        }).catch(function (message) {
+          percentText.textContent = "Failed to load";
+          showBanner(String(message), "error");
+        });
+      };
+      script.onerror = function () {
+        percentText.textContent = "Failed to load";
+        showBanner("Game files could not be loaded. Try refreshing the page.", "error");
+      };
+
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>
